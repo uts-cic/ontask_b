@@ -11,11 +11,11 @@ from rest_framework.documentation import include_docs_urls
 import accounts.urls
 import action.urls
 import dataops.urls
-import email_action.urls
 import logs.urls
-import matrix.urls
+import table.urls
 import profiles.urls
 import workflow.urls
+import scheduler.urls
 from dataops import pandas_db
 from . import views
 
@@ -29,6 +29,10 @@ urlpatterns = [
     url(r'^$', views.HomePage.as_view(), name='home'),
 
     url(r'^entry$', views.entry, name='entry'),
+
+    url(r'^lti_entry$', views.lti_entry, name='lti_entry'),
+
+    url(r'^not_authorized$', views.HomePage.as_view(), name='not_authorized'),
 
     url(r'^about/$', views.AboutPage.as_view(), name='about'),
 
@@ -46,10 +50,9 @@ urlpatterns = [
 
     url(r'^action/', include(action.urls, namespace='action')),
 
-    url(r'^matrix/', include(matrix.urls, namespace='matrix')),
+    url(r'^table/', include(table.urls, namespace='table')),
 
-    url(r'^email_action/', include(email_action.urls,
-                                   namespace='email_action')),
+    url(r'^scheduler/', include(scheduler.urls, namespace='scheduler')),
 
     url(r'^logs/', include(logs.urls, namespace='logs')),
 
@@ -86,4 +89,11 @@ handler404 = 'ontask.views.ontask_handler404'
 handler500 = 'ontask.views.ontask_handler500'
 
 # Create the DB engine with SQLAlchemy (once!)
-pandas_db.engine = pandas_db.create_db_engine()
+pandas_db.engine = pandas_db.create_db_engine(
+    'postgresql',
+    '+psycopg2',
+    settings.DATABASES['default']['USER'],
+    settings.DATABASES['default']['PASSWORD'],
+    settings.DATABASES['default']['HOST'],
+    settings.DATABASES['default']['NAME'],
+)

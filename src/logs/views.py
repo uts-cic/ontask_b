@@ -3,82 +3,20 @@ from __future__ import unicode_literals, print_function
 
 import json
 
-import django_tables2 as tables
 import pytz
 from django.conf import settings as ontask_settings
 from django.contrib.auth.decorators import user_passes_test
-from django.db.models import F
-from django.db.models import Q
+from django.db.models import F, Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, reverse, render
 from django.template.loader import render_to_string
-from django.utils.html import format_html
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django_tables2 import A
 
 from ontask.permissions import is_instructor
 from workflow.ops import get_workflow
 from .models import Log
 from .ops import log_types
-
-
-class LogTable(tables.Table):
-    # Needs to be in the table to be used as URL parameter
-    id = tables.Column(visible=False)
-
-    created = tables.DateTimeColumn(
-        attrs={'td': {'class': 'dt-body-center'}},
-        orderable=False,
-        verbose_name='Date/Time',
-        format=str('r'),
-        short=True)
-
-    user = tables.EmailColumn(
-        attrs={'td': {'class': 'dt-body-center'}},
-        orderable=False,
-        accessor=A('user.email')
-    )
-
-    name = tables.Column(
-        attrs={'td': {'class': 'dt-body-center'}},
-        orderable=False,
-        verbose_name=str('Event type')
-    )
-
-    operations = tables.Column(
-        empty_values=[],
-        attrs={'td': {'class': 'dt-body-center'}},
-        orderable=False,
-        verbose_name=str('Additional data')
-    )
-
-    def __init__(self, data, *args, **kwargs):
-        super(LogTable, self).__init__(data, *args, **kwargs)
-
-    def render_operations(self, record):
-        return format_html(
-            """
-            <button type="submit" class="btn btn-primary btn-sm js-log-view"
-                    data-url="{0}">
-              <span class="glyphicon glyphicon-eye-open"></span> View
-            </button>
-            """.format(reverse('logs:view', kwargs={'pk': record.id}))
-        )
-
-    class Meta:
-        model = Log
-
-        fields = ('created', 'user', 'name', 'operations')
-
-        sequence = ('created', 'user', 'name', 'operations')
-
-        exclude = ('id', 'workflow', 'payload')
-
-        attrs = {
-            'class': 'table display',
-            'id': 'log-table'
-        }
 
 
 @user_passes_test(is_instructor)
@@ -119,19 +57,25 @@ def show_ss(request):
     search_value = request.POST.get('search[value]', None)
 
     # Get the logs
+    qs = Log.objects.filter(
+        workflow__id=workflow.id
+    )
+    recordsTotal = qs.count()
+
     if search_value:
-        qs = Log.objects.filter(
+        # Refine the log
+        qs = qs.filter(
             Q(user__email__contains=search_value) |
             Q(name__contains=search_value) |
             Q(payload__contains=search_value),
             workflow__id=workflow.id,
-        ).distinct().order_by(F('created').desc()).values_list(
-            'id', 'created', 'user__email', 'name', 'payload')
-    else:
-        qs = Log.objects.filter(
-            workflow__id=workflow.id
-        ).order_by(F('created').desc()).values_list(
-            'id', 'created', 'user__email', 'name')
+        ).distinct()
+
+    # Order and select values
+    qs = qs.order_by(F('created').desc()).values_list(
+        'id', 'created', 'user__email', 'name'
+    )
+    recordsFiltered = qs.count()
 
     final_qs = []
     for item in qs[start:start + length]:
@@ -139,9 +83,9 @@ def show_ss(request):
             item[1].astimezone(pytz.timezone(ontask_settings.TIME_ZONE)),
             item[2],
             item[3],
-            """
-            <button type="submit" class="btn btn-primary btn-sm js-log-view"
-                    data-url="{0}">
+            """<button type="submit" class="btn btn-primary btn-sm js-log-view"
+                    data-url="{0}"
+                    data-toggle="tooltip" title="View the content of this log">
               <span class="glyphicon glyphicon-eye-open"></span> View
             </button>
             """.format(reverse('logs:view', kwargs={'pk': item[0]}))]
@@ -152,8 +96,8 @@ def show_ss(request):
     # Result to return as AJAX response
     data = {
         'draw': draw,
-        'recordsTotal': Log.objects.all().count(),
-        'recordsFiltered': len(qs),
+        'recordsTotal': recordsTotal,
+        'recordsFiltered': recordsFiltered,
         'data': final_qs
     }
     # Render the page with the table

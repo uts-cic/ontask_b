@@ -8,11 +8,14 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.views import generic
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_exempt
+from django_auth_lti.decorators import lti_role_required
+from django.views.decorators.clickjacking import xframe_options_exempt
 
 import logs.ops
 from action.models import Action
 from dataops import pandas_db, ops
-from email_action import settings
+from action import settings
 from ontask.permissions import UserIsInstructor
 
 
@@ -33,6 +36,13 @@ def entry(request):
     return redirect('workflow:index')
 
 
+@csrf_exempt
+@xframe_options_exempt
+@lti_role_required(['Instructor', 'Student'])
+def lti_entry(request):
+    return redirect('workflow:index')
+
+
 # No permissions in this URL as it is supposed to be wide open to track email
 #  reads.
 def trck(request):
@@ -40,7 +50,7 @@ def trck(request):
     Receive a request with a token from email read tracking
     :param request: Request object
     :return: Reflects in the DB the reception and (optionally) in the data 
-    matrix of the workflow
+    table of the workflow
     """
     if request.method != 'GET':
         raise Http404

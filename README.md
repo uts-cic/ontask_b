@@ -1,308 +1,147 @@
 # OnTask: Personalised feedback at scale
 
+Current Version: 2.5.1 ([documentation](http://ontask-version-b.readthedocs.io/en/latest/))
+
+## OnTask in a nutshell
+
+- Authentication through LTI, LDAP, Shibboleth
+
+- Data upload through CSV or Excel files
+
+- Actions such as personalised email, personalised web page
+
+- Integrated annotation capture mechanism (similar to a survey engine)
+
+- Visualization of columns (population measures) and individuals with
+  respect to the population
+
+- Email tracking integrated in data table
+
+- Workflows shareable with other users (for teams of instructors)
+
+- Time-based scheduler for actions
+
+- Import/Export functionality to share workflows and data.
+
+- Table views to see only a subset of the data
+
+**For a detailed description of the tool, how to install it, and how to use it
+check the [OnTask Documentation](https://abelardopardo.github.io/ontask_b)**.
+
+## OnTask FAQ
+
 Welcome to OnTask, the platform offering teachers and educational designers
-the capacity to use data to personalise the experience for the learners.
+the capacity to use data to personalise the experience for the learners. For 
+a detailed description of what is OnTask, how to install it and use it, read
+the [OnTask Documentation](https://abelardopardo.github.io/ontask_b).
 
-Learning is complex, highly situated, and requires interacting with peers,
-instructors, resources, platforms, etc. This complexity can be alleaviated
-providing learners with the right support actions. But this process becomes
-increasingly complex when the number of learners grows. The more learners,
-the more difficult is for instructors to provide support and the usual
-solution is to provide generic resources that are only relevant to a subset
-of the audience (think reminder about upcoming assessment deadline).
+Here is a quick summary about ontask:
 
-In parallel wih this increase in complexity, learning platforms now generate
-a wealth of data about those interactions that are technology mediated. This
-data can be collected and used to help instructors and designers to provide a
-truly personalised experience. Why is this not hapenning in current
-platforms? Because the connection between this data and learner support
-actions is very challenging to implement. This is the focus of OnTask:
-provide instructors and designers with a platform to connect data emerging
-from learning environments with highly personalised student support actions.
+Q1. **What is it?** A web tool that allows instructors and learners to connect 
+    data collected during a learning experience with the use of basic rules 
+    (*if this then that*) to personalise support actions.
+  
+Q2. **What kind of data?** OnTask assumes there exist data related to how 
+    learners interact while participating in a learning experience. This can be
+    obtained through a Learning Management System, collected by hand, through 
+    surveys, etc. OnTask allows you to upload the data, it stores it in a table
+    in which every row contains information about one student, and use
+    that data to then personalise how learners see certain resources or receive
+    certain information (these are what we call the *actions*).
 
-Why OnTask? There are several platforms out there that implement similar
-functionality, and the common thread is the positive impact that personalised
-communication may have when supporting learners. There are a few scientific
-publications that document the ideas and processes that inspired the creation
-of OnTask:
-
-- Liu, D. Y.-T., Taylor, C. E., Bridgeman, A. J., Bartimote-Aufflick, K., & Pardo, A. (2016). Empowering instructors through customizable collection and analyses of actionable information Workshop on Learning Analytics for Curriculum and Program Quality Improvement (pp. 3). Edinburgh, UK.
-- Liu, D. Y. T., Bartimote-Aufflick, K., Pardo, A., & Bridgeman, A. J. (2017). Data-driven Personalization of Student Learning Support in Higher Education. In A. Peña-Ayala (Ed.), Learning analytics: Fundaments, applications, and trends: A view of the current state of the art: Springer.  doi:10.1007/978-3-319-52977-6_5
-- Pardo, A., Jovanović, J., Dawson, S., Gašević, D., & Mirriahi, N. (In press). Using Learning Analytics to Scale the Provision of Personalised Feedback. British Journal of Educational Technology. doi:10.1111/bjet.12592
-
-## Installation
-
-OnTask is a Web application that manages data about learners to provide them
-with personalised support. For this reason, it is recommended an installation
-that observes a set of tight security restrictions. Some of these
-restrictions lie within the scope of the tool, but some other are part of the
-environment in which the application is installed. We strongly recommend to
-install OnTask in a web server that uses TTL encryption (HTTPS) to serve all
-the pages. The application requires exchanging with your browser sensitive
-information about your session, so the information should be encrypted.
-
-### Requirements
-
-OnTask has been developed as a [Django](https://www.djangoproject.com/)
-application. Django is a high-level, python-based web framework that supports
-a rich set of functionalities typically required in applications like OnTask.
-But as with many other applications, OnTask requires a set of additional
-applications for its execution:
-
-- Python 2.7.13 (or later)
-- Django (version 1.11.3 or later)
-- Additional django modules (included in the requirements/base.txt) file
-- Redis (version 4.0.2 or later)
-- PostgreSQL (version 9.5 or later)
-
-Some of these requirements are (hopefully) properly handled by
-Python through its package index application [pip](https://pypi.python
-.org/pypi/pip).
-
-### Installing the required tools
-
-The following installation steps assume that you are deploying OnTask in a 
-production web server capable of serving pages using the HTTPS protocol.
-
-#### Install and Configure Redis
-
-1. Download and install [redis](https://redis.io).
-
-   Follow the instructions to configure it to be used by Django.
-
-2. Test that it executes properly
-
-#### Install and Configure PostgreSQL
-
-1. Download and install [postgresql](https://www.postgresql.org).
-
-2. Create the role `ontask` with the command `createuser`. The role
-   should be able to create new databases but not new roles and you should
-   define a password for the user (use `createuser --interactive -W`).
-
-3. Adjust the access configuration in postgresql (usually in file
-   `pg_hba.conf`) to allow the newly created user to access databases locally.
-
-4. Create a new database with name `ontask` with the `createdb` command.
-
-5. Use the client application `psql` to verify that the user has access to
-   the newly created database and can create and delete a new table and run
-   regular queries. Try to connect to the database with the following command:
-
-   ```bash
-   psql -h 127.0.0.1 -U ontask -W ontask
-   ```
-
-   If the client does not connect to the database, review your configuration
-   options.
-
-#### Install Python
-
-In the following sections we assume that you can open a command line
-interpreter and you can execute the python intepreter.
-
-1. Install [python](https://www.python.org).
-
-2. Verify that the python interpreter can run and has the right version (2.7)
-   using the command line interpreter.
-
-3. Install [pip](https://pip.pypa.io/en/stable/) (the package may be called
-   `python-pip`). This tool will be used by both python and django to install
-   numerous libraries that are required to execute OnTask.
-
-#### Download, install and configure OnTask
-
-
-1. Download or clone a copy of[OnTask](https://github.com/abelardopardo/ontask_b).
-
-2. Using a command interpreter, go to the OnTask folder and locate a folder
-   inside it with name `requirements`. Verify that the `requirements`
-   folder contains the files `base.txt`, `production.txt` and
-   `development.txt`. The first file contains a list of python modules that
-   are required by OnTask. The second is a set of additional modules to run a
-   *production* instance, and the third is a list if you intend to run a
-   *development* instance.
-
-3. If you plan to run a production instance of OnTask execute the command:
-
-   ```bash
-     pip install -r requirements/production.txt
-   ```
+Q3. **Does OnTask collect the data for me?** In its basic form, no. It assumes 
+    that you have access to the data yourself and offers a simple way to upload
+    it into the platform to be then used to deploy *actions*. If you you have 
+    specific needs to obtain data, let us know and we can discuss other options.
+     
+Q4. **For which courses is OnTask most useful?** OnTask is ideal for courses 
+    with a large number of students, in which it makes sense to contact the 
+    students either through email or providing them regular suggestions, and 
+    for which there is data available to decide how to personalise such 
+    suggestions. These emails or suggestions are called *actions* within OnTask
+    and can be easily created with different elements depending on the student 
+    data available. 
    
-   Alternatively, if you plan to run a development instance of OnTask then
-   execute the commmand:
+Q5. **What is an action?** In OnTask, an action is the process
+    of either providing (*action out*) or requesting (*action in*) information 
+    to/from learners. An action out 
+    can be an email to the learner with text that is personalised based on 
+    the collected data, or a web page with content selected based on this same 
+    data. An *action in* is page requesting information from the students (like
+    a simple survey) that can then be used to personalise the *actions out*.
+  
+Q6. **But how is this personalisation done?** Simple. OnTask allows you to 
+    write simple rules that decide if a portion of text in an email or a web 
+    page appears or not based on the available data. For example, you may 
+    choose to write two different blurbs for those learners that passed and 
+    failed a set of questions in an exam. Or different suggestions for those 
+    that are minimally, partially, or completely engaged with the course 
+    activities (although you need data about this!). 
+    Theses rules are then applied to every learner to obtain the personalised 
+    text (or resource). This is particularly useful when you have a large 
+    student cohort and want to provide some level of personalisation at a 
+    reasonable effort. 
 
-   ```bash
-     pip install -r requirements/development.txt
-   ```
-   This command traverses a list of libraries and modules and installs them as
-   part of the python libraries in the system. These modules include Django,
-   Django Rest Framework, django braces, etc.
+Q7. **If I send these personalised emails, how do I know if they are used?** 
+    OnTask will help you track that information and add it automatically to the
+    data table.
+   
+Q8. **And what if I want to know which email was sent to which student?** Every
+    time you send emails OnTask offers you the possibility of storing a 
+    *snapshot* of your workflow. You can save that file and upload it as 
+    another workflow in the platform to simply browse through the emails that 
+    were sent.
+     
+Q9. **Will OnTask help me collect information such as attendance?** Yes. This 
+    is a case of an **action in**. OnTask simplifies the task of defining the 
+    type of information that needs to be collected and then offer instructors a
+    simple way to enter that information as it is captured.
+  
+Q10. **How about collecting information such as student annotations?** Yes. As 
+     in the case of attendance, OnTask allows you to pre-define the type of 
+     information you would like to annotate and then quickly select a student 
+     and enter the required data.  
 
-At this point you have the major modules in place. The next steps include the
-configuration of the Django environment to run OnTask.
+Q12. **How about if I want the learners to enter their own annotations?** Yes. 
+     OnTask offers a URL through which (authenticated) learners provide their 
+     own annotations. This can serve as a simple *survey engine* with the data
+     ready for you to use to personalise actions.
 
-If you plan to install a production instance of OnTask, using a plain text
-editor (nano, vim, emacs or similar) in a command line interpreter, open the
-file `manage.py` in the `src` folder of the project. Modify line 14
-replacing the value `"ontask.settings.development"` by
-`"ontask.settings.production"`. Save and close the file.
+Q13. **What if I have a team of instructors?** No problem. OnTask bundles all 
+     the information related to a course in a *workflow*. The creator of a 
+     workflow can then share it with other OnTask users that will have access 
+     to a subset of the operations.
+  
+Q14. **Nice, but sometimes you only want to see a subset of the data**. No 
+     problem. OnTask allows you to define *views* of the data by selecting a 
+     subset of rows and columns. You can simply set up these views for the 
+     different instructors, so that they only have to deal with the data 
+     relevant to them.
 
-Using the same plain text editor create a file with name `local.env`
-in the folder `src/ontask/settings` with the following content (note there is
-no space between variable names and the equal sign):
-
-   ```bash
-   DEBUG=True
-   TIME_ZONE='[YOUR LOCAL PYTHON TIME ZONE]'
-   # syntax: DATABASE_URL=postgres://username:password@127.0.0.1:5432/database
-   DATABASE_URL=postgres://[PSQLUSERNAME]:[PSQLPWD]@127.0.0.1:5432/ontask
-   SECRET_KEY=
-   ```
-
-4. If you want to run a production instance, in the first line of the file
-   change the word *True* by *False* (disables debugging information)
-
-5. Open a command interpreter and execute the following python command:
-
-   ```bash
-     python -c 'import tzlocal; print(tzlocal.get_localzone().zone)'
-
-   ```
-
-   Replace `[YOUR LOCAL PYTHON TIME ZONE]` in the `local.env` file by the
-   description of your time zone produced by the previous command.
-
-6. Modify the fourth line (starting with `DATABASE_URL=` and change the
-   field `[PSQLUSERNAME]` with the name of the Postgresql user created in the
-   previous step (the one that could access the ontask database and run
-   queries). If you decided to use a different name for the database, adjust
-   the last part of the line accordingly (replace *ontask* by the name of
-   your database).
-
-7. Open a command interpreter and execute the following python command:
-
-   ```bash
-     python -c 'import random; import string; print("".join([random.SystemRandom().choice(string.digits + string.ascii_letters + string.punctuation) for i in range(100)]))'
-   ```
-
-   Copy the long string produced as output and add it at the end of the last
-   line of the file `local.env`. It should look something like (with
-   different content after the equal sign):
-
-   ```bash
-     SECRET_KEY=4o93jf0572094jv...
-   ```
-
-8. Create a new folder with name `logs` in the OnTask top folder (next to
-   the `requirements` folder). This folder **is different** from the folder
-   with the same name in the `src` folder.
-
-9. If at some point during the following steps you want to reset
-   the content of the database, run the commands `dropdb` and `createdb`
-
-10. Execute the following commands to prepare the database initialization:
-
-   ```bash
-     python manage.py makemigrations profiles accounts workflow dataops
-     python manage.py makemigrations matrix action email_action logs
-   ```
-
-11. Execute the following command to create the database internal structure:
-
-    ```bash
-     python manage.py migrate
-    ```
-
-   A few messages should appear on the screen related to the initalizaton
-   of the database.
-
-12. Execute the following command to upload to the platform an initial user
-   group:
-
-    ```bash
-     python manage.py loaddata ontask/initial_data.json
-    ```
-
-13. Go to the `src` folder and execute the command to create a superuser
-   account in OnTask:
-
-    ```bash
-     python manage.py createsuperuser
-    ```
-
-   Remember the data that you enter in this step so that
-   you use it when you enter OnTask with your browser.
-
-14. Go to the folder `src` of the project and execute the following
-   command to check the status of the platform::
-
-    ```bash
-     python manage.py check --deploy
-    ```
-
-   The command should print just one warning about the
-   configuration variable `X_FRAME_OPTIONS`.
-
-15. Execute the following command to start the OnTask server:
-
-    ```bash
-     python manage.py runserver
-    ```
-
-   If there are no errors, the message on the screen should say that your
-   server is running and available in the URL `127.0.0.1:8000`
-
-### The Administration Pages
-
-
-As many applications developed using Django, OnTask takes full advantage of
-the administration pages offered by the framework. The account created with
-the command `createsuperuser` has complete access to those pages through a
-link in the upper right corner of the screen.
-
-These pages offer access to several important operations:
-
-- The elements of each of the models stored in the database (workflows,
-  actions, conditions, columns, etc). Each model has its corresponding page
-  allowing the creation, update and deletion of any object.
-
-- The user information. This is a special model representing the users, their
-  name, credentials, etc. The platform allows the creation of user accounts.
-
-- The group information. The platform differentiates users based on groups.
-  Each group has different functionalities.
-
-Once the instance is running, visit these pages and configure the platform to
-your needs.
-
-### Production Deployment
-
-Once OnTask is executing normally, you may configure a web server (nginx,
-apache or similar) to make it available to a community of users. The
-instructions to make such deployment are beyond the scope of this manual but
-they are available for users to consult.
-
-## Authentication
-
-OnTask comes with two default authentication mechanisms: `REMOTE_USER` and
-basic authentication. The [first method uses the variable REMOTE_USER](https://docs.djangoproject.com/en/1.11/howto/auth-remote-user/#authentication-using-remote-user) that is assumed to be defined by an external application. This
-method is ideal for environments in which users are already authenticated and
-are redirected to the OnTask pages (for example, using SAML). If OnTask
-receives a request from a non-existent through this channel, it automatically
-and transparently creates a new user in the platform with the user name
-stored in the `REMOTE_USER` variable.
-
-If such variable is not set in the environment, OnTask resorts to
-conventional authentication requiring email and password. These credentials
-are stored in the internal database managed by OnTask. With these two
-mechanisms, you may have two communities of users, those that are
-authenticated externally (and access the platform directly), and those that
-are authenticaticated with the credentials stored in OnTask.
-
-There are other possibilities to handle user authentication (LDAP, AD, etc.)
-but they require ad-hoc customizations of the tool.
-
+Q15. **After a course finishes, there seems to be quite a lot of information
+     and intelligence captured in OnTask. How do I reuse it?** Easy. OnTask
+     offers you the possibility of exporting and importing your data so you 
+     can either archive it for future reference or share your actions, rules,
+     views, etc with other user.
+  
+Q16. **Can I use OnTask with my institutional authentication?** Yes. OnTaks 
+     comes with the basic functionality to be compatible with the most common 
+     authentication mechanisms such as LTI, LDAP, Shibboleth, etc.
+  
+Q17. **How are these emails sent?** OnTask offers the functionality to connect 
+     to an SMTP server so that emails are sent to the learners. This connection 
+     may need specific parameters to make sure the emails are delivered properly
+     and are not mistaken by span.
+  
+Q18. **This seems like a complex tool to install** OnTask is a web platform and 
+     as such, it needs some basic infrastructure to execute (a machine to keep 
+     the server running, proper authentication, connection with a SMTP server, 
+     etc.) You can deploy the tool in your own personal computer, but it will 
+     have restricted functionality.
+  
+Q19. **Where do I find the details on how to install it and some more 
+     information?** Check the [OnTask Documentation](https://abelardopardo.github.io/ontask_b).   
+     
 ## Contributing
 
 1. Fork it!
@@ -313,8 +152,15 @@ but they require ad-hoc customizations of the tool.
 
 ## Credits
 
-OnTask has been developed as part of the [OnTask Project](https://ontasklearning.org) titled *Scaling the Provision of Personalised Learning Support Actions to Large Student Cohorts* and supported by the Office for Leanring and Teaching of the Australian Government.
-
+OnTask started as a project combining ideas that were present in the Student 
+Relationship Engagement System [SRES](http://sres.io) and subsequent versions. 
+Support for this activity has been provided by the Australian Government 
+Office for Learning and Teaching as part of the [OnTask Project](https://ontasklearning.org) 
+titled *Scaling the Provision of Personalised Learning Support Actions to
+Large Student Cohorts* (OLT project reference SP16-5264). The views expressed
+in this activity do not necessarily reflect the views of the Australian
+Government Office for Learning and Teaching. 
+ 
 ## License
 
 MIT License
@@ -338,3 +184,89 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Other applications distributed as part of OnTask
+
+- [django-auth-lti package](https://github.com/Harvard-University-iCommons/django-auth-lti). 
+  The package has been modified to use email as sole authentication field, and
+  to prevent the patching of the `reverse` method in Django.
+
+- [django-datetime-widget](https://github.com/asaglimbeni/django-datetime-widget) BSD
+
+- [django-summernote](https://github.com/summernote/django-summernote) MIT
+
+- [jQuery QueryBuilder](http://querybuilder.js.org/) MIT
+
+- [searchable-option-list](https://github.com/pbauerochse/searchable-option-list) MIT
+
+## Additional libraries used by OnTask
+
+OnTask uses the following additional libraries/modules with the following 
+licenses:
+
+- [coreapi](https://pypi.python.org/pypi/coreapi) BSD
+
+- [Django](https://www.djangoproject.com) BSD License
+
+- [django-admin-bootstrapped](https://github.com/django-admin-bootstrapped/django-admin-bootstrapped) Apache 2.0
+
+- [django-authtools](https://github.com/fusionbox/django-authtools) BSD
+
+- [django-braces](https://pypi.python.org/pypi/django-braces/1.12.0). BSD 
+  License
+
+- [django-crispy-forms](https://pypi.python.org/pypi/django-crispy-forms/1.7.0) 
+  MIT
+
+- [django-environ](https://pypi.python.org/pypi/django-environ) MIT License
+
+- [django-extensions](https://github.com/django-extensions/django-extensions)
+  MIT
+
+- [django-import-export](https://github.com/django-import-export/django-import-export) BSD
+
+- [django-jquery](https://pypi.python.org/pypi/django-jquery/3.1.0) BSD
+
+- [django-redis](https://github.com/niwinz/django-redis) BSD
+
+- [django-siteprefs](https://github.com/idlesign/django-siteprefs), BSD
+
+- [django-tables2](https://github.com/jieter/django-tables2) MIT
+
+- [django-widget-tweaks](https://github.com/jazzband/django-widget-tweaks) MIT
+
+- [djangorestframework](https://pypi.python.org/pypi/djangorestframework/3.7.7) 
+  BSD
+
+- [easy-thumbnails](https://pypi.python.org/pypi/easy-thumbnails) BSD
+
+- [ims-lti-py](https://github.com/tophatmonocle/ims_lti_py) MIT
+
+- [Markdown](https://pypi.python.org/pypi/Markdown) BSD
+
+- [mock](https://pypi.python.org/pypi/mock) BSD
+
+- [oauth2](https://github.com/joestump/python-oauth2) MIT
+
+- [pandas](https://pandas.pydata.org/) BSD
+
+- [psycopg2](https://pypi.python.org/pypi/psycopg2) LGPL with exceptions or ZPL
+
+- [Pygments](https://pypi.python.org/pypi/Pygments) BSD
+
+- [Python](https://python.org) Python Software Foundation License
+
+- [python-ldap](https://bitbucket.org/psagers/django-auth-ldap/) BSD
+
+- [pytz](https://pypi.python.org/pypi/pytz) MIT
+
+- [Redis](https://redis.io) BSD
+
+- [Sphinx](https://pypi.python.org/pypi/Sphinx) BSD
+
+- [SQLAlchemy](https://pypi.python.org/pypi/SQLAlchemy/1.2.0) MIT
+
+- [tzlocal](https://pypi.python.org/pypi/tzlocal) MIT
+
+- [validate_email](https://pypi.python.org/pypi/validate_email) LGPL
+

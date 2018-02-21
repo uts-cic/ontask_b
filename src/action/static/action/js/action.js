@@ -22,17 +22,25 @@ var insertAttributeInContent = function() {
 }
 
 $(function () {
+  $('#checkAll').click(function () {    
+       $('input:checkbox').prop('checked', this.checked);    
+   });
+
   // Create Action
   $(".js-create-action").click(loadForm);
   $("#modal-item").on("submit", ".js-action-create-form", saveForm);
 
   // Update Action
-  $("#item-table").on("click", ".js-action-update", loadForm);
+  $("#action-table").on("click", ".js-action-update", loadForm);
   $("#modal-item").on("submit", ".js-action-update-form", saveForm);
 
   // Delete Action
-  $("#item-table").on("click", ".js-action-delete", loadForm);
+  $("#action-table").on("click", ".js-action-delete", loadForm);
   $("#modal-item").on("submit", ".js-action-delete-form", saveForm);
+
+  // Clone Action
+  $("#action-table").on("click", ".js-action-clone", loadForm);
+  $("#modal-item").on("submit", ".js-action-clone-form", saveForm);
 
   // Create filter
   $("#filter-set").on("click", ".js-filter-create", loadForm);
@@ -73,29 +81,13 @@ $(function () {
 
   // Preview
   $("#html-editor").on("click", ".js-action-preview", loadForm);
+  $("#email-action-request-data").on("click", ".js-email-preview", loadForm);
   $(".modal-content").on("click", ".js-action-preview-nxt", loadForm);
   $(".modal-content").on("click", ".js-action-preview-prv", loadForm);
 
   // Show URL
-  $("#item-table").on("click", ".js-action-showurl", loadForm);
-});
-
-$(document).ready(function() {
-    if (document.getElementById("item-table") != null) {
-        // Required for DataTables
-        $('#item-table').DataTable({
-            "language": {
-                "emptyTable": "There are no actions for this workflow."
-            },
-            "columnDefs": [
-                {"orderable": false, "targets": 3},
-                {"searchable": false, "targets": 3},
-            ],
-        });
-    }
-    if (document.getElementById("id_content") != null) {
-      initSummernote();
-    }
+  $("#action-table").on("click", ".js-action-showurl", loadForm);
+  $("#modal-item").on("submit", ".js-action-showurl-form", saveForm);
 });
 
 

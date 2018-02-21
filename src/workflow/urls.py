@@ -14,6 +14,8 @@ urlpatterns = [
 
     url(r'^create/$', views.WorkflowCreateView.as_view(), name='create'),
 
+    url(r'^(?P<pk>\d+)/clone/$', views.clone, name='clone'),
+
     url(r'^(?P<pk>\d+)/update/$', views.update, name='update'),
 
     url(r'^(?P<pk>\d+)/delete/$', views.delete, name='delete'),
@@ -30,7 +32,9 @@ urlpatterns = [
 
     url(r'^export_ask/$', import_export_views.export_ask, name='export_ask'),
 
-    url(r'^export/$', import_export_views.export, name='export'),
+    url(r'^(?P<data>(\d+(,\d+)*)?)/export/$',
+        import_export_views.export,
+        name='export'),
 
     url(r'^import/$', import_export_views.import_workflow, name='import'),
 
@@ -42,7 +46,11 @@ urlpatterns = [
         attribute_views.attribute_create,
         name='attribute_create'),
 
-    url(r'^attribute_delete/$',
+    url(r'^(?P<pk>\d+)/attribute_edit/$',
+        attribute_views.attribute_edit,
+        name='attribute_edit'),
+
+    url(r'^(?P<pk>\d+)/attribute_delete/$',
         attribute_views.attribute_delete,
         name='attribute_delete'),
 
@@ -54,13 +62,17 @@ urlpatterns = [
         share_views.share_create,
         name='share_create'),
 
-    url(r'^share_delete/$',
+    url(r'^(?P<pk>\d+)/share_delete/$',
         share_views.share_delete,
         name='share_delete'),
 
     # Column manipulation
 
     url(r'^column_add/$', column_views.column_add, name='column_add'),
+
+    url(r'^formula_column_add/$',
+        column_views.formula_column_add,
+        name='formula_column_add'),
 
     url(r'^(?P<pk>\d+)/column_delete/$',
         column_views.column_delete,
@@ -69,6 +81,10 @@ urlpatterns = [
     url(r'^(?P<pk>\d+)/column_edit/$',
         column_views.column_edit,
         name='column_edit'),
+
+    url(r'^(?P<pk>\d+)/column_clone/$',
+        column_views.column_clone,
+        name='column_clone'),
 
     # API
 

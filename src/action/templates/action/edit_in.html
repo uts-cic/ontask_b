@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% load settings %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load widget_tweaks %}
+{% block extrahead %}
+  <link href="{% static 'site/css/query-builder.default.min.css' %}" rel="stylesheet">
+  <link href="{% static 'site/css/sol.css' %}" rel="stylesheet">
+  {{ form.media }}
+{% endblock extrahead %}
+{% block scripts %}
+  <script src="{% static 'site/js/query-builder.standalone.min.js' %}" ></script>
+  <script src="{% static 'site/js/sol.js' %}"></script>
+  <script src="{% static 'action/js/action.js' %}{% otv %}"></script>
+  <script type="text/javascript">
+    var qbuilder_options = {
+      plugins: ['bt-tooltip-errors', 'not-group'],
+      operators: ['equal', 'not_equal', 'less', 'less_or_equal',
+                  'greater', 'greater_or_equal', 'between', 'not_between',
+                  'begins_with', 'not_begins_with', 'contains', 'not_contains',
+                  'ends_with', 'not_ends_with', 'is_empty', 'is_not_empty'],
+      allow_empty: true,
+      filters: {{ query_builder_ops|safe }},
+      rules: [],
+    };
+    if (document.getElementById('id_filter') != null) {
+      window.onload = set_qbuilder('#id_filter', qbuilder_options);
+    }
+    if (document.getElementById("id_columns") != null) {
+      set_column_select();
+    }
+  </script>
+{% endblock %}
+{% block title %}{{ block.super }}Edit action in{% endblock %}
+{% block container %}
+<div align="center" class="container-fluid">
+  <h1 class="page-header">Action In: <strong>{{ action.name }}</strong></h1>
+  <form method="POST" action="" onsubmit="return insert_fields(this)">
+    {% include 'action/includes/partial_edit_in_buttons.html' %}
+    {% csrf_token %}
+    {% if form.errors %}
+      {% for error in form.non_field_errors %}
+        <div class="alert alert-danger">
+          <strong>{{ error|escape }}</strong>
+        </div>
+      {% endfor %}
+    {% endif %}
+    {% render_field form.filter class="form-control" %}
+    <h4>Filter to restrict input to some rows</h4>
+    <div id="builder" class="container"></div>
+    <h4>Select the columns in the action</h4>
+    {% render_field form.columns class="form-control" %}
+    {% include 'action/includes/partial_edit_in_buttons.html' %}
+  </form>
+</div>
+{% endblock container %}

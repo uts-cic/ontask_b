@@ -41,10 +41,10 @@ TEMPLATES[0]['OPTIONS'].update({"loaders": loaders})
 TEMPLATES[0].update({"APP_DIRS": False})
 
 # Define STATIC_ROOT for the collectstatic command
-STATIC_ROOT = join(BASE_DIR, '..', 'site', 'static')
+STATIC_ROOT = join(BASE_DIR(), '..', 'site', 'static')
 
 # Log everything to the logs directory at the top
-LOGFILE_ROOT = join(dirname(BASE_DIR), 'logs')
+LOGFILE_ROOT = join(dirname(BASE_DIR()), 'logs')
 
 # Reset logging
 LOGGING_CONFIG = None
@@ -67,6 +67,18 @@ LOGGING = {
             'filename': join(LOGFILE_ROOT, 'project.log'),
             'formatter': 'verbose'
         },
+        'script_log_file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': join(LOGFILE_ROOT, 'script.log'),
+            'formatter': 'verbose'
+        },
+        'scheduler_log_file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': join(LOGFILE_ROOT, 'scheduler.log'),
+            'formatter': 'verbose'
+        },
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
@@ -78,10 +90,20 @@ LOGGING = {
             'handlers': ['proj_log_file'],
             'level': 'DEBUG',
         },
-    'django.request': {
-        'handlers': ['proj_log_file'],
-        'level': 'ERROR',
-        'propagate': True,
+        'django.request': {
+            'handlers': ['proj_log_file'],
+            'level': 'ERROR',
+            'propagate': True,
+        },
+        'scripts': {
+            'handlers': ['script_log_file'],
+            'propagate': True,
+            'level': 'DEBUG',
+        },
+        'scripts.scheduler': {
+            'handlers': ['scheduler_log_file'],
+            'propagate': True,
+            'level': 'DEBUG',
         },
     }
 }

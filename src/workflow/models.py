@@ -3,6 +3,8 @@ from __future__ import unicode_literals, print_function
 
 import json
 
+import datetime
+import pytz
 from django.conf import settings
 from django.contrib.postgres.fields import JSONField
 from django.db import models
@@ -13,7 +15,7 @@ from dataops import pandas_db
 
 class Workflow(models.Model):
     """
-    Model for a workflow, that is, a matrix, set of column descriptions and
+    Model for a workflow, that is, a table, set of column descriptions and
     all the information regarding the actions, conditions and such. This is
     the main object in the relational model.
     """
@@ -51,6 +53,7 @@ class Workflow(models.Model):
     attributes = JSONField(default=dict,
                            blank=True,
                            null=True)
+
     query_builder_ops = JSONField(default=dict,
                                   blank=True,
                                   null=True)
@@ -174,12 +177,27 @@ class Workflow(models.Model):
     def __str__(self):
         return self.name
 
+    def __unicode__(self):
+        return self.name
+
     class Meta:
         unique_together = ('user', 'name')
 
 
 class Column(models.Model):
     """
+    Column object. contains information that should be at all times
+    consistent with the structure of the data frame stored in the database.
+
+    The column must point to the workflow.
+
+    Some columns are identified as "key" if they have unique values for all
+    table rows (pandas takes care of this with one line of code)
+
+    The data type is computed by Pandas upon reading the data.
+
+    The categories field is to provide a finite set of values as a JSON list
+
     """
 
     # Column name
@@ -223,10 +241,25 @@ class Column(models.Model):
         null=True,
         verbose_name='Comma separated list of allowed values')
 
+    # Validity window
+    active_from = models.DateTimeField(
+        'Column active from',
+        blank=True,
+        null=True,
+        default=None,
+    )
+
+    active_to = models.DateTimeField(
+        'Column active until',
+        blank=True,
+        null=True,
+        default=None
+    )
+
     def get_categories(self):
         """
-
-        :return:
+        Return the categories and parse datetime if needed.
+        :return: List of values
         """
         if self.data_type == 'datetime':
             return [parse_datetime(x) for x in self.categories]
@@ -301,7 +334,21 @@ class Column(models.Model):
 
         return [Column.validate_column_value(data_type, x) for x in values]
 
+    @property
+    def is_active(self):
+        """
+        Function to ask if a column is active: the current time is within the
+        interval defined by active_from - active_to.
+        :return: Boolean encoding the active status
+        """
+        now = datetime.datetime.now(pytz.timezone(settings.TIME_ZONE))
+        return not ((self.active_from and now < self.active_from) or
+                    (self.active_to and self.active_to < now))
+
     def __str__(self):
+        return self.name
+
+    def __unicode__(self):
         return self.name
 
     class Meta:

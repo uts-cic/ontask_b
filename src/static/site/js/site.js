@@ -1,13 +1,21 @@
 var set_qbuilder = function (element_id, qbuilder_options) {
-    $(element_id).hide();
     id_formula_value = $(element_id).val();
     if (id_formula_value != "null" && id_formula_value != "{}") {
       qbuilder_options['rules'] = JSON.parse(id_formula_value);
     }
     $('#builder').queryBuilder(qbuilder_options);
 };
-var insert_query = function () {
-    console.log('hi');
+var set_column_select = function() {
+  $('#id_columns').searchableOptionList({
+    maxHeight: '250px',
+    showSelectAll: true,
+    texts: {
+      searchplaceholder: 'Click here to search for columns',
+      noItemsAvailable: 'No columns found',
+    }
+  });
+ }
+var insert_fields = function (the_form) {
     if (document.getElementById("id_filter") != null) {
       formula = $('#builder').queryBuilder('getRules');
       if (formula == null || !formula['valid']) {
@@ -20,6 +28,9 @@ var insert_query = function () {
 }
 var loadForm = function () {
     var btn = $(this);
+    if ($(this).is('[class*="disabled"]')) {
+      return;
+    }
     if (document.getElementById("id_content") != null) {
       data = {'action_content': $("#id_content").summernote('code')};
     } else {
@@ -34,9 +45,21 @@ var loadForm = function () {
         $("#modal-item").modal("show");
       },
       success: function(data) {
+        if (data.form_is_valid) {
+          if (data.html_redirect == "") {
+            // If there is no redirect, simply refresh
+            window.location.reload(true);
+          } else {
+            location.href = data.html_redirect;
+          }
+          return;
+        }
         $("#modal-item .modal-content").html(data.html_form);
         if (document.getElementById("id_formula") != null) {
           set_qbuilder('#id_formula', qbuilder_options);
+        }
+        if (document.getElementById("id_columns") != null) {
+          set_column_select();
         }
       },
       error: function(jqXHR, textStatus, errorThrown) {
@@ -61,12 +84,21 @@ var saveForm = function () {
       dataType: 'json',
       success: function (data) {
         if (data.form_is_valid) {
-          location.href = data.html_redirect;
+          $("#modal-item .modal-content").html("");
+          if (data.html_redirect == "") {
+            // If there is no redirect, simply refresh
+            window.location.reload(true);
+          } else {
+            location.href = data.html_redirect;
+          }
         }
         else {
           $("#modal-item .modal-content").html(data.html_form);
           if (document.getElementById("id_formula") != null) {
             set_qbuilder('#id_formula', qbuilder_options);
+          }
+          if (document.getElementById("id_columns") != null) {
+            set_column_select();
           }
         }
       },
@@ -77,19 +109,6 @@ var saveForm = function () {
     return false;
 }
 
-
-$(window).scroll(function () {
-  var top = $(document).scrollTop();
-  $('.corporate-jumbo').css({
-    'background-position': '0px -'+(top/3).toFixed(2)+'px'
-  });
-  if(top > 50)
-    $('.navbar').removeClass('navbar-transparent');
-  else
-    $('.navbar').addClass('navbar-transparent');
-}).trigger('scroll');
-
 $(document).ready(function(){
-    $('[data-toggle="tooltip"]').tooltip();
+    $('[data-toggle="tooltip"]').tooltip({ trigger: "hover" });
 });
-

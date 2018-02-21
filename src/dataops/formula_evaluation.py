@@ -5,7 +5,7 @@ import itertools
 
 from django.utils.dateparse import parse_datetime
 
-from ontask import OntaskException
+from ontask import OntaskException, fix_pctg_in_name
 
 
 def has_variable(formula, variable):
@@ -37,6 +37,10 @@ def rename_variable(formula, old_name, new_name):
     :param new_name: New variable name
     :return: The new modified formula.
     """
+
+    # Trivial case of an empty formula
+    if not formula:
+        return formula
 
     if 'condition' in formula:
         # Recursive call
@@ -199,33 +203,38 @@ def evaluate_node(node, given_variables):
 
 def evaluate_node_sql(node):
     """
-    Given a node representing a query, and a dictionary with (name, values),
-    translates the expression into a SQL query.
+    Given a node representing a query filter
+    translates the expression into a SQL filter expression.
     :param node: Node representing the expression
-    :return: String with the query and list of fields to replace
+    :return: String with the filter and list of fields to replace
     """
     if 'condition' in node:
         # Node is a condition, get the values of the sub-clauses
         sub_pairs = \
             [evaluate_node_sql(x) for x in node['rules']]
 
+        if not sub_pairs:
+            # Nothing has been returned, so it is an empty query
+            return '', []
+
         # Now combine
         if node['condition'] == 'AND':
-            result = '(' + \
-                     ') AND ('.join([x for x, _ in sub_pairs]) + ')'
+            result = '((' + \
+                     ') AND ('.join([x for x, _ in sub_pairs]) + '))'
         else:
-            result = '(' + \
-                     ') OR ('.join([x for x, _ in sub_pairs]) + ')'
+            result = '((' + \
+                     ') OR ('.join([x for x, _ in sub_pairs]) + '))'
         result_fields = \
             list(itertools.chain.from_iterable([x for _, x in sub_pairs]))
 
         if node.pop('not', False):
-            result = 'NOT (' + result + ')'
+            result = '(NOT (' + result + '))'
 
         return result, result_fields
 
-    # Get the variable name
-    varname = node['field']
+    # Get the variable name and duplicate the symbol % in case it is part of
+    # the variable name (escape needed for SQL processing)
+    varname = fix_pctg_in_name(node['field'])
 
     # Get the operator
     operator = node['operator']
@@ -262,7 +271,7 @@ def evaluate_node_sql(node):
         result = '"{0}"'.format(varname) + ' LIKE %s'
         result_fields = [node['value'] + "%"]
 
-    elif operator == 'not_begin_with' and node['type'] == 'string':
+    elif operator == 'not_begins_with' and node['type'] == 'string':
         result = '"{0}"'.format(varname) + ' NOT LIKE %s'
         result_fields = [node['value'] + "%"]
 
@@ -283,7 +292,7 @@ def evaluate_node_sql(node):
         result_fields = ["%" + node['value']]
 
     elif operator == 'is_empty' and node['type'] == 'string':
-        result = '"{0}"'.format(varname) + " == ''"
+        result = '"{0}"'.format(varname) + " = ''"
 
     elif operator == 'is_not_empty' and node['type'] == 'string':
         result = '"{0}"'.format(varname) + " != ''"

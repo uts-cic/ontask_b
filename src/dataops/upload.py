@@ -8,10 +8,9 @@ from django.urls import reverse
 
 import logs.ops
 from dataops import ops, pandas_db
-from ontask import slugify
 from ontask.permissions import is_instructor
 from workflow.ops import get_workflow
-from .forms import SelectColumnUploadForm, SelectUniqueKeysForm
+from .forms import SelectColumnUploadForm, SelectKeysForm
 
 
 @user_passes_test(is_instructor)
@@ -26,7 +25,7 @@ def upload_s2(request):
 
     column_types: List of column types as detected by pandas
 
-    src_is_unique_column: Boolean list with src columns that are unique
+    src_is_key_column: Boolean list with src columns that are unique
 
     step_1: URL name of the first step
 
@@ -57,7 +56,7 @@ def upload_s2(request):
     try:
         initial_columns = upload_data.get('initial_column_names')
         column_types = upload_data.get('column_types')
-        src_is_unique_column = upload_data.get('src_is_unique_column')
+        src_is_key_column = upload_data.get('src_is_key_column')
     except KeyError:
         # The page has been invoked out of order
         return redirect(upload_data.get('step_1', 'dataops:list'))
@@ -65,7 +64,7 @@ def upload_s2(request):
     # Get or create the list with the renamed column names
     rename_column_names = upload_data.get('rename_column_names', None)
     if rename_column_names is None:
-        rename_column_names = [slugify(x) for x in initial_columns]
+        rename_column_names = initial_columns[:]
         upload_data['rename_column_names'] = rename_column_names
 
     # Get or create list of booleans identifying columns to be uploaded
@@ -74,17 +73,23 @@ def upload_s2(request):
         columns_to_upload = [False] * len(initial_columns)
         upload_data['columns_to_upload'] = columns_to_upload
 
+    # Bind the form with the received data (remember unique columns)
+    form = SelectColumnUploadForm(
+        request.POST or None,
+        column_names=rename_column_names,
+        is_key=src_is_key_column
+    )
+
+    load_fields = [f for f in form if f.name.startswith('upload_')]
+    newname_fields = [f for f in form if f.name.startswith('new_name_')]
+
     # Create one of the context elements for the form. Pack the lists so that
     # they can be iterated in the template
-    df_info = [list(i) for i in zip(column_types,
-                                    src_is_unique_column,
+    df_info = [list(i) for i in zip(load_fields,
                                     initial_columns,
-                                    rename_column_names,
-                                    columns_to_upload)]
-
-    # Bind the form with the received data (remember unique columns)
-    form = SelectColumnUploadForm(request.POST or None,
-                                  columns=src_is_unique_column)
+                                    newname_fields,
+                                    column_types,
+                                    src_is_key_column)]
 
     # Process the initial loading of the form and return
     if request.method != 'POST':
@@ -95,7 +100,7 @@ def upload_s2(request):
                    'prev_step': reverse(upload_data['step_1']),
                    'wid': workflow.id}
 
-        if not ops.workflow_id_has_matrix(workflow.id):
+        if not ops.workflow_id_has_table(workflow.id):
             # It is an upload, not a merge, set the next step to finish
             context['next_name'] = 'Finish'
         return render(request, 'dataops/upload_s2.html', context)
@@ -108,20 +113,18 @@ def upload_s2(request):
                    'wid': workflow.id,
                    'prev_step': reverse(upload_data['step_1']),
                    'df_info': df_info}
-        if not ops.workflow_id_has_matrix(workflow.id):
+        if not ops.workflow_id_has_table(workflow.id):
             # If it is an upload, not a merge, set next step to finish
             context['next_name'] = 'Finish'
         return render(request, 'dataops/upload_s2.html', context)
 
     # Form is valid
 
-    # We need to modify df_info with the information received in the post
+    # We need to modify upload_data with the information received in the post
     for i in range(len(initial_columns)):
         new_name = form.cleaned_data['new_name_%s' % i]
-        df_info[i][3] = new_name
         upload_data['rename_column_names'][i] = new_name
         upload = form.cleaned_data['upload_%s' % i]
-        df_info[i][4] = upload
         upload_data['columns_to_upload'][i] = upload
 
     # Update the dictionary with the session information
@@ -199,7 +202,7 @@ def upload_s3(request):
 
     column_types: List of column types as detected by pandas
 
-    src_is_unique_column: Boolean list with src columns that are unique
+    src_is_key_column: Boolean list with src columns that are unique
 
     step_1: URL name of the first step
 
@@ -217,9 +220,9 @@ def upload_s3(request):
 
     dst_unique_col_names: List with the column names that are unique
 
-    dst_selected_key: Unique column name selected in DST
+    dst_selected_key: Key column name selected in DST
 
-    src_selected_key: Unique column name selected in SRC
+    src_selected_key: Key column name selected in SRC
 
     how_merge: How to merge. One of {left, right, outter, inner}
 
@@ -265,27 +268,28 @@ def upload_s3(request):
     # merge (source)
     columns_to_upload = upload_data['columns_to_upload']
     src_column_names = upload_data['rename_column_names']
-    src_is_unique_column = upload_data['src_is_unique_column']
+    src_is_key_column = upload_data['src_is_key_column']
     src_unique_col_names = [v for x, v in enumerate(src_column_names)
-                            if src_is_unique_column[x] and columns_to_upload[x]]
+                            if src_is_key_column[x] and columns_to_upload[x]]
 
     # Calculate the names of columns that overlap between the two data
     # frames. It is the intersection of the column names that are not key in
     # the existing data frame and those in the source DF that are selected,
     # renamed and not unique
     rename_column_names = upload_data['rename_column_names']
-    are_overlap_cols = (
-                           # DST Column names that are not Keys
-                           (set(dst_column_names) - set(dst_is_unique_column)) &
-                           # SRC Column names that are renamed, selected and not unique
-                           set([x for x, y, z in zip(rename_column_names,
-                                                     columns_to_upload,
-                                                     src_is_unique_column)
-                                if y and not z])) != set([])
+    are_overlap_cols = (  # DST Column names that are not Keys
+                               (set(dst_column_names) - set(
+                                   dst_is_unique_column)) &
+                               # SRC Column names that are renamed, selected and not
+                               #  unique
+                               set([x for x, y, z in zip(rename_column_names,
+                                                         columns_to_upload,
+                                                         src_is_key_column)
+                                    if y and not z])) != set([])
 
     # Bind the form with the received data (remember unique columns and
     # preselected keys.)'
-    form = SelectUniqueKeysForm(
+    form = SelectKeysForm(
         request.POST or None,
         dst_keys=dst_unique_col_names,
         src_keys=src_unique_col_names,
@@ -344,7 +348,7 @@ def upload_s3(request):
                 i += 1
                 new_name = col + '_{0}'.format(i)
                 if new_name not in rename_column_names and \
-                                new_name not in dst_column_names:
+                        new_name not in dst_column_names:
                     break
             # Record the new created name in the resulting list
             autorename_column_names[idx] = new_name
@@ -370,7 +374,7 @@ def upload_s4(request):
 
     column_types: List of column types as detected by pandas
 
-    src_is_unique_column: Boolean list with src columns that are unique
+    src_is_key_column: Boolean list with src columns that are unique
 
     step_1: URL name of the first step
 
@@ -386,9 +390,9 @@ def upload_s4(request):
 
     dst_unique_col_names: List with the column names that are unique
 
-    dst_selected_key: Unique column name selected in DST
+    dst_selected_key: Key column name selected in DST
 
-    src_selected_key: Unique column name selected in SRC
+    src_selected_key: Key column name selected in SRC
 
     how_merge: How to merge. One of {left, right, outter, inner}
 
@@ -449,10 +453,9 @@ def upload_s4(request):
                           'column_unique': col_info[2],
                           'error_msg': status})
 
-            messages.error(request, 'Merge operation failed.'),
-            return render(request, 'dataops/upload_s4.html',
-                          {'prev_step': reverse('dataops:upload_s3'),
-                           'next_name': 'Finish'})
+            messages.error(request,
+                           'Merge operation failed. (' + status + ')'),
+            return redirect(reverse('dataops:list'))
 
         # Log the event
         logs.ops.put(request.user,
@@ -533,7 +536,7 @@ def upload_s4(request):
         else:
             # Check if there was autorename
             if autorename_column_names and \
-                            autorename_column_names[idx] != x:
+                    autorename_column_names[idx] != x:
                 final_name = \
                     autorename_column_names[idx]
                 suffix = ', Automatically renamed'

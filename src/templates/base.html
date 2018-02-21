@@ -3,7 +3,6 @@
   {% load settings %}
   {% load staticfiles %}
   {% load thumbnail %}
-
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -11,12 +10,10 @@
     <meta name="description" content="{% block description %}{% endblock description %}">
     <meta name="author" content="Arun Ravindran">
     <link rel="shortcut icon" type="image/png" href="{% static 'site/ico/favicon.ico' %}" type="favicon/ico">
-
     <title>{% block title %}{% include "_brandname.html" %} :: {% endblock %}</title>
-
     <!-- Bootstrap core CSS -->
     <link href="https://netdna.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.css" rel="stylesheet">
-
+    <link href="https://netdna.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.css" rel="stylesheet">
     <!-- Custom styles for this site -->
     {% block styles %}
     <link href="{% static 'site/css/main.css' %}" rel="stylesheet">
@@ -24,7 +21,6 @@
     <script type="text/javascript" src="{% static 'js/jquery.js' %}"></script>
     <!-- Custom tags for the head tag -->
     {% block extrahead %}{% endblock extrahead %}
-
     <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
     <!--[if lt IE 9]>
       <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
@@ -44,9 +40,7 @@
         <a class="navbar-brand" href="{% url 'entry' %}">
           {% block navbar-brand %}
             <img src="{% static 'site/img/logo.png' %}" alt="logo">
-          {% comment %}
-            {% include "_brandname.html" %}
-          {% endcomment %}
+            <span class="glyphicon glyphicon-home"></span>
           {% endblock %}
         </a>
       </div>
@@ -56,24 +50,43 @@
           {% block navbar-left %}
             {% if request.session.ontask_workflow_id %}
               {% url 'workflow:detail' request.session.ontask_workflow_id as workflow_url %}
-              <li {% if request.path == workflow_url %}class="active"{% endif %}><a
+              <li {% if '/workflow/' in request.path %}class="active"{% endif %}><a
                   href="{{ workflow_url }}">Details</a></li>
               {% url 'dataops:list' as dataops_url %}
-              <li {% if request.path == dataops_url %}class="active"{% endif %}><a
+              <li {% if '/dataops/' in request.path %}class="active"{% endif %}><a
                   href="{{ dataops_url }}">Dataops</a>
               </li>
 
-              {% url 'matrix:display' as matrix_display %}
-              <li {% if request.path == matrix_display %}class="active"{% endif %}><a
-                  href="{% url 'matrix:display' %}">Matrix</a>
+              {% comment %}
+              {% url 'dataops:list' as dataops_url %}
+              <li class="dropdown" {% if request.path == dataops_url %}class="active"{% endif %}>
+                <a class="dropdown-toggle" data-toggle="dropdown" href="{{ dataops_url }}">Dataops
+                  <span class="caret"></span></a>
+                <ul class="dropdown-menu">
+                  <li><a href="{% url 'dataops:uploadmerge' %}">File Upload
+                      /Merge</a></li>
+                  <li><a href="{% url 'dataops:transform' %}">Transform</a></li>
+                </ul>
+              </li>
+              {% endcomment %}
+
+
+              {% url 'table:display' as table_display %}
+              <li {% if '/table/' in request.path %}class="active"{% endif %}><a
+                  href="{% url 'table:display' %}">Table</a>
               </li>
 
               {% url 'action:index' as actions_url %}
-              <li {% if request.path == actions_url %}class="active"{% endif %}><a
+              <li {% if '/action/' in request.path %}class="active"{% endif %}><a
                   href="{{ actions_url }}">Actions</a></li>
 
-              <li class="{% if not request.session.ontask_workflow_id %}disabled{% endif %}"><a
-                  href="{% url 'logs:show' %}">Logs</a>
+              {% url 'scheduler:index' as scheduler_url %}
+              <li {% if '/scheduler/' in request.path %}class="active"{% endif %}><a
+                  href="{{ scheduler_url }}">Scheduler</a></li>
+
+              {% url 'logs:show' as logs_url %}
+              <li {% if '/logs/' in request.path %}class="active"{% endif %}><a
+                  href="{{ logs_url }}">Logs</a>
               </li>
             {% else %}
               <li><a href="https://ontasklearning.org">About</a></li>
@@ -85,7 +98,7 @@
           {% block navbar-right %}
             <a href="{% static ONTASK_HELP_URL %}" class="btn btn-info"
                     data-toggle="tooltip"
-                    data-placement="bottom" title="Check the manual">
+                    data-placement="bottom" title="Read the manual">
               <span class="glyphicon glyphicon-book"></span></a>
             {% if user.is_authenticated %}
               {% if user.is_staff %}
@@ -117,16 +130,13 @@
         {% endfor %}
       {% endif %}
     {% endblock %}
-
     {% block splash %}
     {% endblock splash %}
-    
     {% if request.session.ontask_workflow_name %}
-    <div id="wflow-name" class="text-center alert alert-info">
-      {{ request.session.ontask_workflow_name }}
-    </div>
+      <div id="wflow-name" class="text-center alert alert-info">
+        {{ request.session.ontask_workflow_name }}
+      </div>
     {% endif %}
-
     {% block container %}
     <div class="container">
       <div class="starter-template">
@@ -135,7 +145,6 @@
       </div>
     </div>
     {% endblock container %}
-
     <!-- Site footer -->
     {% block footer %}
       <div class="container-fluid">
@@ -152,7 +161,7 @@
       </div>
     {% endblock %}
     <script src="https://netdna.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.js"></script>
-    <script src="{% static 'site/js/site.js' %}"></script>
+    <script src="{% static 'site/js/site.js' %}{% otv %}"></script>
     {% block scripts %}
     {% endblock scripts %}
   </body>

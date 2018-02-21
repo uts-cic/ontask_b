@@ -1,8 +1,208 @@
+## 2.5.1
+
+### Added
+
+### Changed
+
+- Column delete now returns to previous screen (table or workflow detail)
+
+### Fixed
+
+- Bug preventing columns to be deleted from the table view.
+
+## 2.5.0 (2018-02-18)
+
+### Added
+
+- Visualisations
+
+  1) For each column in the table
+  
+  2) For each row in the table 
+  
+  3) For subsets of the matrix and certain types of visualisations (tentative)
+  
+  These visualizations are implemented using the open-source javascript 
+  library plot.ly/javascript
+  
+### Changed
+
+- Folded some of the operations into a pull/down menu to simplify interface
+
+- Rebranded the import button in the workflows page to make sure it says 
+  "Workflow" and users do not think it is the link to upload data (which is 
+  the first step)
+   
+### Fixed 
+
+- Bug when filtering columns and obtaining a row in the table
+  
+## 2.4.0 (2017-12-18)
+
+### Added
+
+- Take a set of already existing columns and combine them to create a new 
+  one using the following operations:
+  - sum (addition)
+  - prod (product)
+  - max (maximum value)
+  - min (minimum value)
+  - mean
+  - median
+  - mode
+  - std (standard deviation)
+  - all (boolean conjunction)
+  - any (boolean disjunction)
+
+- The table now can be viewed selecting a "View" which is a set of colums and 
+  a formula to filter rows. A workflow can have an arbitrary number of views.
+  They are available in the Table section and can be created, edited, deleted
+  and cloned.  
+  
+- Documentation now available in [OnTask documentation in Github.io]
+(https://abelardopardo.github.io/ontask_b)
+
+### Changed
+
+- Removed django-auth-ldap from requirements. Instructions mention the need to
+  install it if needed.
+  
+- Simplified operation menus. Less options visible and more tucked under 
+  dropdown buttons. 
+ 
+- Improved rendering of the action in form for data input from the learners.
+
+- Reimplemented attribute manipulation screen to make it similar in 
+  functionality to the rest
+  
+## 2.3.0 (2017-12-30)
+
+### Added
+
+- Support for LDAP integration through django-auth-ldap
+
+- Read CSV now allows to specify number of lines at the top and
+  bottom of the file to skip.
+  
+- Read Excel files into Table
+
+- Read SQL queries into Table giving the parameters to connect to a DB.
+
+### Changed
+
+- Fixed various glicthes when sending confirmation emails and HTML email
+  formatting 
+  
+## 2.2.0 (2017-12-23)
+
+### Changed
+
+- Removed the restriction of using only column, attribute and condition names
+  starting with a letter followed by a letter, digit or '_'. The only 
+  restriction is that the names cannot contain the characters " and '.
+   
+## 2.1.1 (2017-12-19)
+
+### Changed
+
+- Fixed bug when creating API token and session expired.
+
+- Fixed bug preventing excel CSV files to be uploaded.
+
+## 2.1.0 (2017-12-13)
+
+### Added
+
+- Edit columns from the table display
+
+- Columns now have an active from-to window with a datetime. If they are 
+  inactive, they are ignored when running Actions In
+  
+- URL for actions in/out now have an additional date/time window.
+
+- Columns in the workflow can now be cloned (duplicating values)
+
+- New app to schedule execution of actions (not fully implemented yet)
+
+### Changed
+
+- Fixed bug showing wrong number of (filtered) entries in AJAX generated 
+  tables.
+
+- Refined the process to clone workflows, columns, actions, conditions.
+
+- Fixed but on import/export of actions
+
+- Workflows can no longer be exported without the data. It does not make 
+  sense because the presence of the data frame defines the columns and those 
+  columns are used in all the actions. A workflow without the data would be 
+  reduced only to the text in the action out. 
+
+## 2.0.0
+
+### Added
+
+- Included new functionality to allow easy data entry. Data entry can be done
+  as "Action In" (as opposed to Action Out for sending information). With 
+  this functionality, instructors can easily enter information by hand, or 
+  even collect the information from the students.
+  
+- Clone functionality for workflows, actions and conditions. 
+
+- Write the documentation for the new actions.
+
+## 1.4.0
+
+### Changed
+
+- Removed the use of query strings in URLs. All parameters are now path of the
+  path
+
+### Added
+
+- Support for LTI authentication (using the django-auth-lti package). More 
+information in the installation instructions.
+
+## 1.3.0
+
+### Changed
+
+- Matrix is out. Table is in. Thanks Marion
+
+- Fixed bug when importing a workflow without data frame and requesting to
+  upload it.
+
+- Fixed bug when editing actions in a workflow without data. Conditions and 
+  filters were incorrectly allowed to edit.
+
+- Polished how columns in CSV file upload are managed (internally)  
+
+### Added
+
+- New export functionality lets you choose which elements to include (table and
+  actions)
+  
+- Home text next to the icon (confussing otherwise)
+
+- Test for import/export functionality
+
+## 1.2.2
+
+### Added
+
+- Additional material in the tutorial (still unfinished)
+
+### Changed
+
+- Fixed bug preventing the edition of columns
+
+- Fixed bug when rendering the export done page.
+
 ## 1.2.1
 
 ### Added
 
-- Email tracking available. Creates an extra column in the matrix.
+- Email tracking available. Creates an extra column in the table.
 
 ### Changed
 
@@ -41,7 +241,7 @@
 - Column table in workflow detail is now redered with DataTables (paging,
   search capacity)
   
-- Fixed search functionality in matrix view to search all fields (despite data
+- Fixed search functionality in table view to search all fields (despite data
   type)
   
 - First version implementing row views (manual data entry). Just CRUD. No
@@ -93,7 +293,7 @@
 - Shared workflows now have restricted operations. Delete, flush, rename are
   only allowed to owners.
   
-- Columns can now also be added from the matrix screen.
+- Columns can now also be added from the table screen.
 
 - Send email now checks for correctness of email addresses (basic check)
   

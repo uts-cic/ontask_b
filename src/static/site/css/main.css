@@ -202,8 +202,6 @@ div.conditions {
 
 div.condition-btn {
     padding: 0.5ex;
-    background-color: darkgray;
-    margin: 0.25ex 0.25ex 0.25ex 0.25ex;
 }
 /* Tweaks for JQuery QueryBuilder
 
@@ -237,9 +235,13 @@ td.dt-body-center {
     text-align: center;
     }
 
-#matrix-data td,
-#item-table td,
-#log-table td {
+#table-data td,
+#actioninrun-data td,
+#workflow-table td,
+#action-table td,
+#log-table td,
+#scheduler-table td,
+#view-table td {
     vertical-align: middle;
 }
 
@@ -250,7 +252,7 @@ td.dt-body-center {
 
 /* Wflow name */
 #wflow-name.alert {
-    padding: 1ex;
+    padding: 0.5ex;
 }
 
 mark {
@@ -276,3 +278,28 @@ a.btn {
 
 th.dt-center, td.dt-center { text-align: center; }
 
+table#attribute-table {
+    margin-top: 20px;
+}
+
+#workflow-area .dropdown-menu {
+  left: 70%;
+  right: auto;
+  text-align: center;
+  transform: translate(-50%, 0);
+}
+
+#filter-set .dropdown-menu {
+  left: 50%;
+  right: auto;
+  text-align: center;
+  transform: translate(-50%, 0);
+}
+
+.dropdown-menu .btn {
+    width:100%;
+}
+
+div.sol-container {
+    display: table;
+}

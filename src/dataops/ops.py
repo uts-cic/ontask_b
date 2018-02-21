@@ -4,7 +4,7 @@ from __future__ import unicode_literals, print_function
 import pandas as pd
 from django.conf import settings
 
-from action.models import Condition
+from action.models import Condition, Action
 from dataops import formula_evaluation
 from dataops.pandas_db import (
     create_table_name,
@@ -13,9 +13,10 @@ from dataops.pandas_db import (
     df_column_types_rename,
     load_table,
     get_table_data,
-    is_matrix_in_db,
+    is_table_in_db,
     get_table_queryset,
     pandas_datatype_names)
+from table.models import View
 from workflow.models import Workflow, Column
 
 
@@ -26,18 +27,6 @@ def is_unique_column(df_column):
     :return: Boolean encoding if the column has unique values
     """
     return len(df_column.unique()) == len(df_column)
-
-
-def clean_column_name(val):
-    """
-    Function to transform column names and remove characters that are
-    problematic with pandas <-> SQL (such as parenthesis)
-    :param val:
-    :return: New val
-    """
-
-    newval = val.replace('(', '[')
-    return newval.replace(')', ']')
 
 
 def are_unique_columns(data_frame):
@@ -67,7 +56,7 @@ def store_table_in_db(data_frame, pk, table_name, temporary=False):
              - column names
              - column types
              - column is unique
-             If temporary = False, return None. All this infor is stored in
+             If temporary = False, return None. All this info is stored in
              the workflow
     """
 
@@ -75,7 +64,7 @@ def store_table_in_db(data_frame, pk, table_name, temporary=False):
         print('Storing table ', table_name)
 
     # get column names and types
-    df_column_names = map(clean_column_name, list(data_frame.columns))
+    df_column_names = list(data_frame.columns)
     df_column_types = df_column_types_rename(data_frame)
 
     # if the data frame is temporary, the procedure is much simpler
@@ -94,30 +83,25 @@ def store_table_in_db(data_frame, pk, table_name, temporary=False):
 
     # Get the workflow and its columns
     workflow = Workflow.objects.get(id=pk)
-    wf_columns = Column.objects.filter(workflow__id=pk)
+    wf_col_names = Column.objects.filter(
+        workflow__id=pk
+    ).values_list("name", flat=True)
 
     # Loop over the columns in the data frame and reconcile the column info
     # with the column objects attached to the WF
-    has_new_columns = False
     for cname in df_column_names:
         # See if this is a new column
-        wf_column = next((x for x in wf_columns if x.name == cname), None)
-        if not wf_column:
-            # This column is new
-            has_new_columns = True
+        if cname in wf_col_names:
+            # If column already exists in wf_col_names, no need to do anything
+            continue
 
-            # Create a valid name if needed
-            clean_name = clean_column_name(cname)
-            if clean_name != cname:
-                # Rename the column in the df
-                data_frame.rename(columns={cname, clean_name}, inplace=True)
-
-            Column.objects.create(
-                name=clean_name,
-                workflow=workflow,
-                data_type=pandas_datatype_names[
-                    data_frame[clean_name].dtype.name],
-                is_key=is_unique_column(data_frame[clean_name]))
+        # Create the new column
+        Column.objects.create(
+            name=cname,
+            workflow=workflow,
+            data_type=pandas_datatype_names[
+                data_frame[cname].dtype.name],
+            is_key=is_unique_column(data_frame[cname]))
 
     # Get now the new set of columns with names
     wf_column_names = Column.objects.filter(
@@ -192,12 +176,18 @@ def get_table_row_by_index(workflow, cond_filter, idx):
     return dict(zip(workflow.get_column_names(), data[idx - 1]))
 
 
-def workflow_has_matrix(workflow_item):
-    return is_matrix_in_db(create_table_name(workflow_item.id))
+def workflow_has_table(workflow_item):
+    return is_table_in_db(create_table_name(workflow_item.id))
 
 
-def workflow_id_has_matrix(workflow_id):
-    return is_matrix_in_db(create_table_name(workflow_id))
+def workflow_id_has_table(workflow_id):
+    return is_table_in_db(create_table_name(workflow_id))
+
+
+def workflow_has_upload_table(workflow_item):
+    return is_table_in_db(
+        create_upload_table_name(workflow_item.id)
+    )
 
 
 def get_queryset_by_workflow(workflow_item):
@@ -248,7 +238,7 @@ def perform_dataframe_upload_merge(pk, dst_df, src_df, merge_info):
                           how=merge_info['how_merge'],
                           left_on=merge_info['dst_selected_key'],
                           right_on=merge_info['src_selected_key'])
-    except Exception, e:
+    except Exception as e:
         return 'Merge operation failed. Exception: ' + e.message
 
     # If the merge produced a data frame with no rows, flag it as an error to
@@ -270,14 +260,14 @@ def perform_dataframe_upload_merge(pk, dst_df, src_df, merge_info):
         # Condition 1: Data type
         if pandas_datatype_names[new_df[col.name].dtype.name] != col.data_type:
             return 'New values in column ' + col.name + ' are not of type ' \
-                    + col.data_type
+                   + col.data_type
 
         # Condition 2: If there are categories, the new values should be
         # compatible with them.
         if col.categories and not all([x in col.categories
                                        for x in new_df[col.name]]):
             return 'New values in column ' + col.name + ' are not within ' \
-                    + 'the categories ' + ', '.join(col.categories)
+                   + 'the categories ' + ', '.join(col.categories)
 
         # Condition 3:
         col.is_key = is_unique_column(new_df[col.name])
@@ -341,6 +331,20 @@ def rename_df_column(df, workflow, old_name, new_name):
     for cond in conditions:
         cond.formula = formula_evaluation.rename_variable(
             cond.formula, old_name, new_name)
+        cond.save()
+
+    # Rename the appearances of the variable in all actions
+    for action_item in Action.objects.filter(workflow=workflow):
+        action_item.rename_variable(old_name, new_name)
+
+    # Rename the appearances of the variable in the formulas in the views
+    for view in View.objects.filter(workflow=workflow):
+        view.formula = formula_evaluation.rename_variable(
+            view.formula,
+            old_name,
+            new_name
+        )
+        view.save()
 
     return df.rename(columns={old_name: new_name})
 
@@ -349,7 +353,7 @@ def detect_datetime_columns(data_frame):
     """
     Given a data frame traverse the columns and those that have type "string"
     try to see if it is of type datetime. If so, apply the translation.
-    :param df:
+    :param data_frame: Pandas dataframe to detect datetime columns
     :return:
     """
     # Strip white space from all string columns and try to convert to

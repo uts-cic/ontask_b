@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-
+{% load settings %}
 {% load staticfiles %}
 {% load crispy_forms_tags %}
 
@@ -44,12 +44,12 @@
   <div class="row">
     <div class="col-lg-4">
       <h2>The importance of personalisation</h2>
-      <p>Students are more likely to have an effective learning experience
+      <p>Learners are more likely to have an effective experience
         when their environment is personalised. Resources, comments,
         suggestions and feedback that take into account the reality of each
-        student are much more effective than those addressing an entire
+        learner are much more effective than those addressing an entire
         cohort. But personalisation has traditionally been based on highly
-        detailed pre-conceived models of student behavior. Ontask offers an
+        detailed pre-conceived models of learner behaviour. OnTask offers an
         environment to personalise resources based on data collected from any
         learning environment.
       </p>
@@ -57,22 +57,22 @@
     <div class="col-lg-4">
       <h2>The importance of feedback</h2>
       <p>Feedback is more effective when framed as a dialogue. But such
-        dialogue will be highly situated in the personal situation of each
-        student. How can we combine knowledge about the students with the
-        need to have personalised interaction? Ontask will help instructors
-        and students with the initial septs for this dialogue.</p>
+        dialogue will be highly dependent on the personal situation of each
+        learner. How can we combine knowledge about the learners with the
+        need to have personalised interaction? OnTask will help instructors
+        and learners to initiate this dialogue.</p>
     </div>
     <div class="col-lg-4">
       <h2>The importance of data</h2>
-      <p>In the era of highly technology mediated learning, data is
-        ubiquitous. But rather than an instantaneously benefitial feature,
-        this data abundance brings a serious challenge to tranform data into
+      <p>In the era of technology-mediated learning, data is
+        ubiquitous. But instead of providing instantaneous benefits,
+        this abundance brings a serious challenge to tranform data into
       actionable knowledge. It is not enough to have data, it is essential
-        to put data to support a clearly identified objective in the
-        learning environment. How can this support be clearly articulated?
-        How can it be used in multiple environments? OnTask is the tool that
-      realises this connection between data and its use to provide an
-        scalable solution to learning personalisation</p>
+        to use data to support a clearly identified objective in the
+        learning environment. How can this support be articulated?
+        How can it be used in multiple environments? OnTask
+      establishes this connection between data and its use to provide a
+        scalable solution to learning personalisation.</p>
       <p><a class="btn btn-primary" href="https://ontasklearning.org"
             role="button">More Information &raquo;</a></p>
     </div>
@@ -86,6 +86,6 @@
 {% endblock container %}
 
 {% block scripts %}
-<script src="{% static 'site/js/site.js' %}"></script>
+<script src="{% static 'site/js/site.js' %}{% otv %}"></script>
 {% endblock scripts %}
 

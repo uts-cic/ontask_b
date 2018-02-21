@@ -4,15 +4,18 @@ from __future__ import unicode_literals, print_function
 import json
 
 import pandas as pd
+from datetimewidget.widgets import DateTimeWidget
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 
 from dataops import pandas_db, ops
-from ontask import is_legal_var_name
-from ontask import ontask_prefs
-from ontask.forms import RestrictedFileField
+from ontask import ontask_prefs, is_legal_name
+from ontask.forms import RestrictedFileField, dateTimeOptions
 from .models import Workflow, Column
+
+
+# Options for the datetime picker used in column forms
 
 
 class WorkflowForm(forms.ModelForm):
@@ -72,22 +75,28 @@ class AttributeItemForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         self.keys = kwargs.pop('keys')
+
+        key = kwargs.pop('key', '')
+        value = kwargs.pop('value', '')
+
         super(AttributeItemForm, self).__init__(*args, **kwargs)
+
+        self.fields['key'].initial = key
+        self.fields['value'].initial = value
 
     def clean(self):
         data = super(AttributeItemForm, self).clean()
 
-        if ' ' in data['key'] or '-' in data['key']:
-            self.add_error(
-                'key',
-                'Attribute names can only have letters, numbers and _'
-            )
+        # Name is legal
+        msg = is_legal_name(data['key'])
+        if msg:
+            self.add_error('key', msg)
             return data
 
         if data['key'] in self.keys:
             self.add_error(
                 'key',
-                'Name has to be different from the existing ones.')
+                'Name has to be different from all existing ones.')
             return data
 
         return data
@@ -101,7 +110,9 @@ class ColumnBasicForm(forms.ModelForm):
         label='Comma separated list of allowed values')
 
     def __init__(self, *args, **kwargs):
+
         self.workflow = kwargs.pop('workflow', None)
+        self.data_frame = None
 
         super(ColumnBasicForm, self).__init__(*args, **kwargs)
 
@@ -117,18 +128,16 @@ class ColumnBasicForm(forms.ModelForm):
 
         # Column name must be a legal variable name
         if 'name' in self.changed_data:
-            if not is_legal_var_name(data['name']):
-                self.add_error(
-                    'name',
-                    'Column name must start with a letter or _ '
-                    'followed by letters, numbers or _'
-                )
+            # Name is legal
+            msg = is_legal_name(data['name'])
+            if msg:
+                self.add_error('name', msg)
                 return data
 
             # Check that the name is not present already
             if next((c for c in self.workflow.columns.all()
                      if c.id != self.instance.id and
-                                     c.name == data['name']), None):
+                        c.name == data['name']), None):
                 # New column name collides with existing one
                 self.add_error(
                     'name',
@@ -157,8 +166,8 @@ class ColumnBasicForm(forms.ModelForm):
                 # these categories (only if the column is being edited, though
                 if self.instance.name and \
                         not all([x in valid_values
-                                for x in self.data_frame[self.instance.name]
-                                if x and not pd.isnull(x)]):
+                                 for x in self.data_frame[self.instance.name]
+                                 if x and not pd.isnull(x)]):
                     self.add_error(
                         'raw_categories',
                         'The values in the column are not compatible with ' +
@@ -170,11 +179,34 @@ class ColumnBasicForm(forms.ModelForm):
 
             self.instance.set_categories(valid_values)
 
+        # Check the datetimes. One needs to be after the other
+        a_from = self.cleaned_data['active_from']
+        a_to = self.cleaned_data['active_to']
+        if a_from and a_to and a_from >= a_to:
+            self.add_error(
+                'active_from',
+                'Incorrect date/time window'
+            )
+            self.add_error(
+                'active_to',
+                'Incorrect date/time window'
+            )
+
         return data
 
     class Meta:
         model = Column
-        fields = ['name', 'description_text', 'data_type', 'raw_categories']
+        fields = ['name', 'description_text', 'data_type', 'raw_categories',
+                  'active_from', 'active_to']
+
+        widgets = {
+            'active_from': DateTimeWidget(options=dateTimeOptions,
+                                          usel10n=True,
+                                          bootstrap_version=3),
+            'active_to': DateTimeWidget(options=dateTimeOptions,
+                                        usel10n=True,
+                                        bootstrap_version=3)
+        }
 
 
 class ColumnAddForm(ColumnBasicForm):
@@ -186,12 +218,15 @@ class ColumnAddForm(ColumnBasicForm):
         label='Value to assign to all cells in the column'
     )
 
+    def __init__(self, *args, **kwargs):
+        super(ColumnAddForm, self).__init__(*args, **kwargs)
+        self.initial_valid_value = None
+
     def clean(self):
         data = super(ColumnAddForm, self).clean()
 
         # Try to convert the initial value ot the right type
         initial_value = data['initial_value']
-        self.initial_valid_value = None
         if initial_value:
             try:
                 self.initial_valid_value = Column.validate_column_value(
@@ -203,13 +238,12 @@ class ColumnAddForm(ColumnBasicForm):
                     'initial_value',
                     'Incorrect initial value'
                 )
-                return data
 
         return data
 
-    class Meta:
-        model = Column
-        fields = ('name', 'description_text', 'data_type')
+    class Meta(ColumnBasicForm.Meta):
+        fields = ['name', 'description_text', 'data_type', 'active_from',
+                  'active_to']
 
 
 class ColumnRenameForm(ColumnBasicForm):
@@ -249,9 +283,80 @@ class ColumnRenameForm(ColumnBasicForm):
 
         return data
 
-    class Meta:
-        model = Column
-        fields = ('name', 'description_text', 'data_type', 'is_key')
+    class Meta(ColumnBasicForm.Meta):
+        fields = ['name', 'description_text', 'data_type', 'is_key',
+                  'active_from', 'active_to']
+
+
+class FormulaColumnAddForm(forms.ModelForm):
+    # Columns to combine
+    columns = forms.MultipleChoiceField([],
+                                        required=False,
+                                        label='Columns to combine*')
+
+    # Type of operation
+    op_type = forms.ChoiceField(
+        required=True,
+        label='Operation')
+
+    def __init__(self, data, *args, **kwargs):
+        # Operands for the new derived column
+        self.operands = kwargs.pop('operands')
+        # Workflow columns
+        self.wf_columns = kwargs.pop('columns')
+
+        super(FormulaColumnAddForm, self).__init__(data, *args, **kwargs)
+
+        # Populate the column choices
+        self.fields['columns'].choices = [
+            (idx, c.name) for idx, c in enumerate(self.wf_columns)
+        ]
+
+        # Populate the operand choices
+        self.fields['op_type'].choices = [('', '---')] \
+                                         + [(a, b) for a, b, _ in self.operands]
+
+
+    def clean(self):
+        data = super(FormulaColumnAddForm, self).clean()
+
+        # If there are no columns given, return
+        column_idx_str = data.get('columns')
+        if not column_idx_str:
+            self.add_error(
+                None,
+                'You need to select the columns to combine'
+            )
+            return data
+
+        # Get the list of columns selected in the form
+        self.selected_columns = [self.wf_columns[int(idx)]
+                                 for idx in column_idx_str]
+
+        # Get the set of data types in the selected columns
+        result_type = set([x.data_type for x in self.selected_columns])
+
+        # Get the operand
+        operand = next((x for x in self.operands if x[0] == data['op_type']),
+                       None)
+
+        # The data type of the operand must be contained in the set of allowed
+        if not result_type.issubset(set(operand[2])):
+            self.add_error(
+                None,
+                'Incorrect data type for the selected operand'
+            )
+            return data
+
+        return data
+
+    class Meta(ColumnBasicForm.Meta):
+        fields = ['name',
+                  'description_text',
+                  'op_type',
+                  'columns',
+                  'active_from',
+                  'active_to']
 
 
 class WorkflowImportForm(forms.Form):
@@ -260,35 +365,68 @@ class WorkflowImportForm(forms.Form):
         max_length=512,
         strip=True,
         required=True,
-        label='Workflow name',
-        help_text='If false only the action text will be included')
+        label='Name')
 
     file = RestrictedFileField(
         max_upload_size=str(ontask_prefs.MAX_UPLOAD_SIZE),
         content_types=json.loads(str(ontask_prefs.CONTENT_TYPES)),
         allow_empty_file=False,
-        label="",
+        label="File",
         help_text='File containing a previously exported workflow')
-
-    # Include data and actions?
-    include_data_and_cond = forms.BooleanField(
-        label='Include data and actions (if available)?',
-        initial=True,
-        required=False)
 
 
 class WorkflowExportRequestForm(forms.Form):
-    # Include data and conditions?
-    include_data_and_cond = forms.BooleanField(
-        label='Include also actions in export?',
-        initial=True,
-        required=False)
+
+    def __init__(self, *args, **kargs):
+        """
+        Kargs contain: actions: list of action objects, put_labels: boolean
+        stating if the labels should be included in the form
+        :param args:
+        :param kargs:
+        """
+        # List of columns to process and a field prefix
+        self.actions = kargs.pop('actions', [])
+        self.field_prefix = kargs.pop('field_prefix', 'select_')
+
+        # Should the labels be included?
+        self.put_labels = kargs.pop('put_labels', False)
+
+        super(WorkflowExportRequestForm, self).__init__(*args, **kargs)
+
+        # Create as many fields as the given columns
+        for i, a in enumerate(self.actions):
+            # Include the labels if requested
+            if self.put_labels:
+                label = a.name
+            else:
+                label = ''
+
+            self.fields[self.field_prefix + '%s' % i] = forms.BooleanField(
+                label=label,
+                label_suffix='',
+                required=False,
+            )
 
 
 class SharedForm(forms.Form):
+    """
+    Form to ask for a user email to add to those sharing the workflow. The
+    form uses two parameters:
+    :param user: The user making the request (to detect self-sharing)
+    :param workflow: The workflow to share (to detect users already in the
+     list)
+    """
     user_email = forms.CharField(max_length=1024,
                                  strip=True,
                                  label='User email')
+
+    def __init__(self, *args, **kwargs):
+
+        self.request_user = kwargs.pop('user', None)
+        self.workflow = kwargs.pop('workflow')
+        self.user_obj = None
+
+        super(SharedForm, self).__init__(*args, **kwargs)
 
     def clean(self):
         data = super(SharedForm, self).clean()
@@ -299,5 +437,17 @@ class SharedForm(forms.Form):
             )
         except ObjectDoesNotExist:
             self.add_error('user_email', 'User not found')
+
+        if self.user_obj == self.request_user:
+            self.add_error(
+                'user_email',
+                "You don't need to add yourself to the share list"
+            )
+
+        if self.user_obj in self.workflow.shared.all():
+            self.add_error(
+                'user_email',
+                "User already in the list"
+            )
 
         return data
