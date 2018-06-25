@@ -1,15 +1,191 @@
-## 2.5.1
+## 2.7.0 (2018-06-04)
 
 ### Added
+
+- Functionality to export andi mport actions alone. This is very useful to 
+  simply transfer a single set of conditions or columns from one workflow to 
+  another.
+  
+- Definition and usage of SQL connections. The definition is only available 
+for the superuser and instructors are allowed to use them in the upload/merge
+ page.
+ 
+- Use of plugins. Arbitrary transformations of a subset of the dataframe are 
+now allowed by installing python modules in a specific folder. 
+
+### Changed
+
+- Revamped the structure of the page to edit the action ins.
+
+- Extended and polished documetation
+
+### Fixed
+
+## 2.6.1 (2018-05-23)
+
+### Added
+
+- Platform now notifies with a pop-up one minute before the session user session
+  expires (Issue #31)
+  
+- Arrows in the table view to move columns left and right (issue #33)
+
+### Changed
+
+- Changed the way a merge is reported before the last step. The key columns
+  now appear separately if they have different names as they will both 
+  survive the merge operation (issue #39)
+  
+- File name when exporting a workflow now includes a date/time suffix (issue 
+  #36)
+
+- Changed HTTP headers to allow Safari to save the workflow with the right 
+  extension.
+   
+- Conditions and filters now show the number of rows that satisfy the 
+  specified condition (issue #26)
+
+- Removed the back buttom from the page for learner data submission (issue 
+  #27)  
+
+- All columns are selected by default when uploading a new CSV (issue #28)
+
+- Merged the options of tracking an email and adding a column in the table. 
+  They are now the same option (issue #35)
+  
+- Active column label only appears if the column is "Disabled" by date/time 
+  (issue #22)
+  
+- Changed wording in tooltips in the Action Out edit page to offer better 
+  guidance to the new user (issue #23)
+  
+- Changed wording in the buttons to move columns in the workflow (issue #29)
+
+- Excel upload does not have a sheet name by default any more (issue #38)
+
+- Datetimes shown now without the T in between (issue #42)
+  
+### Fixed
+
+- Merge procedure improved to consider the case where src and dst keys are
+  different, but still src key is equal to a column in dst (issue #41)
+
+- CSV download button in table view now correctly narrows the table to the right
+  data when using a view (previously, it would download the whole table 
+  regardless, issue #34)
+
+- Column picker widget was rendered in an incorrect location (issue #21)   
+
+- Modal windows now opening for all the operations are not closed when clicking
+  outside of the area (issue #20)
+  
+- Fixed glitch when inserting an image in action out after using the modal
+  page to edit a condition (issue #32)
+  
+- Fixed merge procedure to account for the corner case in which the upcoming 
+  key column is matched against another existing column with a different name, 
+  but the existing data frame does have a column with such name. Example: 
+  Existing data frame with columns C1, C2 and C3 (C1 and C2 are keys). New 
+  data frame with columns C2 and C4. The merge is done matching C1 in the 
+  existing DF and C2 in the new DF. The merge now goes through and C2 is 
+  updated accordingly (issue #40)
+  
+- Fixed how merge operation fails in the presence of NaN appearing in Key 
+  columns. The merge operation now has a security check to prevent this from 
+  hapenning (issue #41) 
+
+## 2.6.0 (2018-05-13) 
+
+### Added
+
+- Possibility to change the order in which columns are shown.
+
+- Download the table as CSV
+
+### Changed
+
+- Major overhaul of the documentation available when merging dataframes. When
+  choosing now the merging uption, a figure and corresponding text explains the
+  result of the operation.
+  
+- Preventing the modal window to close when clicking outside of it.
+
+- Simplified the layout for the Action-Out screen
+
+- Changed the name of the Workflow "Rename" button to "Edit"
+
+- Search in tables is now case insensitive.
+
+- End of CSV upload operation now is followed by workflow details screen
+
+- Re-writing of the action-in screen to make it consistent with the rest of
+  the application.
+  
+- Various navigation sequences to reduce the number of clicks
+
+### Fixed
+
+- AND/OR button in condition builder is now easier to differentiate.
+
+- Misalignment of the NOT button in condition builder.
+
+- Bug that leaked Views when table is flushed in the workflow
+
+- Error in URL included in emails
+
+## 2.5.1 (2018-04-21)
+
+### Added
+
+- Documentation on how to open the URL in OnTask to track email reading when using SAML authentication (Apache configuration)
+
+- Tables now remember their state (number of items shown, search item)
+
+- Documentation now has the initial set of *scenarios* to showcase the differet functionality available in the platform. This section is unfinished.
 
 ### Changed
 
 - Column delete now returns to previous screen (table or workflow detail)
 
+- Email preview now uses the subject text provided in the form.
+
+- Platform now prevents concurrent sessions from the same user. If a user tries
+  to access a workflow that is being used by another session in another 
+  browser, the platform rejects the access until the previous session is 
+  terminated by logout, or (if the browser has been closed) it expires.
+  
+- Removed bootstrapped Admin interface and restored the original one.
+
 ### Fixed
 
+- Changed the update of the action out text to use a POST request and prevent
+  the System Error due to the length of the text (Issues 13 and 15)
+  
 - Bug preventing columns to be deleted from the table view.
 
+- Bug limiting the length of the action text when using preview (Issue 18)
+
+- Bug limiting the search in tables to only pure string columns (unable to
+  search columns with booleans that are promoted to strings)
+  
+- Bug when merging/updating data sets with overlapping columns. The code
+  was not considering them as existing columns. Major rewriting of the
+  update/merge functionality.
+
+- Bug detecting condition names with spaces in action out text
+
+- Bug when enforcing new data types after merge/update operation
+
+- Bug when flushing a workflow that did not restored the selected number of 
+  rows in the action filters.
+  
+- Bug when evaluating the condition and filter expressions in the presence of 
+  None or NULL values  (Issue 14)
+  
+- Bug when sending emails when preview fails (Issue 16)
+
+- Bug failing to detect a non gzip file when given to Import (Issue 11)
+  
 ## 2.5.0 (2018-02-18)
 
 ### Added
@@ -36,7 +212,7 @@
 ### Fixed 
 
 - Bug when filtering columns and obtaining a row in the table
-  
+
 ## 2.4.0 (2017-12-18)
 
 ### Added

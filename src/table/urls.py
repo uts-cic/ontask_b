@@ -4,8 +4,7 @@ from __future__ import unicode_literals, print_function
 from django.conf.urls import url
 from rest_framework.urlpatterns import format_suffix_patterns
 
-from . import api
-from . import views, stat_views
+from . import api, views, stat_views
 
 app_name = 'table'
 
@@ -14,7 +13,6 @@ urlpatterns = [
     #
     # API
     #
-    # JSON
     url(r'^(?P<pk>\d+)/ops/$', api.TableJSONOps.as_view(), name="api_ops"),
 
     url(r'^(?P<pk>\d+)/merge/$', api.TableJSONMerge.as_view(),
@@ -29,7 +27,7 @@ urlpatterns = [
     #
     # Display
     #
-    url(r'^display/$', views.display, name="display"),
+    url(r'^$', views.display, name="display"),
 
     url(r'^display_ss/$', views.display_ss, name="display_ss"),
 
@@ -75,6 +73,13 @@ urlpatterns = [
         stat_views.stat_column,
         name="stat_column"),
 
+    #
+    # CSV Download
+    #
+    url(r'^csvdownload/$', views.csvdownload, name="csvdownload"),
+
+    url(r'^(?P<pk>\d+)/csvdownload/$', views.csvdownload,
+        name="csvdownload_view"),
 ]
 
 urlpatterns = format_suffix_patterns(urlpatterns)
