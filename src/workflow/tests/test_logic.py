@@ -35,14 +35,10 @@ class WorkflowImportExport(test.OntaskTestCase):
         response = do_export_workflow(workflow,
                                       workflow.actions.all())
 
-        self.assertEqual(response.get('Content-Type'),
-                         'application/octet-stream')
-        self.assertEqual(response['Content-Transfer-Encoding'], 'binary')
-        self.assertTrue(
-            response.get('Content-Disposition').startswith(
-                'attachment; filename="ontask_workflow'
-            )
-        )
+        self.assertEqual(response.get('Content-Encoding'),
+                         'application/gzip')
+        self.assertEqual(response.get('Content-Disposition'),
+                         'attachment; filename="ontask_workflow.gz"')
 
         # Process the file
         data_in = gzip.GzipFile(fileobj=BytesIO(response.content))
@@ -89,10 +85,10 @@ class WorkflowImport(test.OntaskLiveTestCase):
         )
 
         # Click in the import button and wait
-        self.selenium.find_element_by_link_text('Import workflow').click()
+        self.selenium.find_element_by_link_text('Import Workflow').click()
         WebDriverWait(self.selenium, 10).until(
             EC.text_to_be_present_in_element((By.CLASS_NAME, 'page-header'),
-                                             'Import workflow')
+                                             'Import Workflow')
         )
 
         # Set the workflow name and file

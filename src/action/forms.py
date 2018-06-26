@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
 
-import json
-
 from datetimewidget.widgets import DateTimeWidget
 from django import forms
+from django.forms.widgets import SelectMultiple
 from django_summernote.widgets import SummernoteInplaceWidget
 
-from ontask import ontask_prefs, is_legal_name
-from ontask.forms import column_to_field, dateTimeOptions, RestrictedFileField
+from ontask import is_legal_name
+from ontask.forms import column_to_field, dateTimeOptions
 from .models import Action, Condition
 
 # Field prefix to use in forms to avoid using column names (they are given by
@@ -27,13 +26,6 @@ class ActionForm(forms.ModelForm):
         fields = ('name', 'description_text',)
 
 
-class ActionDescriptionForm(forms.ModelForm):
-
-    class Meta:
-        model = Action
-        fields = ('description_text',)
-
-
 class EditActionOutForm(forms.ModelForm):
     """
     Main class to edit an action out. The main element is the text editor (
@@ -49,6 +41,54 @@ class EditActionOutForm(forms.ModelForm):
         fields = ('content',)
 
 
+# Form to select a subset of the columns
+class EditActionInForm(forms.ModelForm):
+    """
+    Main class to edit an action in. Two elements appear in the form. The
+    filter expression to select a subset of rows from the table, and a widget
+    to select multiple columns.
+    """
+
+    # Columns to to select
+    columns = forms.ModelMultipleChoiceField(queryset=None, required=False)
+
+    def __init__(self, data, *args, **kwargs):
+        # Get the workflow to access the columns
+        workflow = kwargs.pop('workflow', None)
+
+        super(EditActionInForm, self).__init__(data, *args, **kwargs)
+
+        # Required enforced in the server (not in the browser)
+        self.fields['filter'].required = False
+
+        # Filter should be hidden.
+        self.fields['filter'].widget = forms.HiddenInput()
+
+        # The queryset for the columns must be extracted from the workflow
+        self.fields['columns'].queryset = workflow.columns.all()
+
+    def clean(self):
+        data = super(EditActionInForm, self).clean()
+
+        # Check if there is at least one key column
+        if not any([a.is_key for a in data['columns']]):
+            self.add_error(
+                None,
+               'There must be at least one unique column in the view')
+
+        # Check if there is at least one non-key column
+        if not any([not a.is_key for a in data['columns']]):
+            self.add_error(
+                None,
+                'There must be at least one non-unique column in the view')
+
+        return data
+
+    class Meta:
+        model = Action
+        fields = ('filter', 'columns')
+
+
 # Form to enter values in a row
 class EnterActionIn(forms.Form):
 
@@ -57,7 +97,6 @@ class EnterActionIn(forms.Form):
         # Store the instance
         self.columns = kargs.pop('columns', None)
         self.values = kargs.pop('values', None)
-        self.show_key = kargs.pop('show_key', False)
 
         super(EnterActionIn, self).__init__(*args, **kargs)
 
@@ -66,11 +105,6 @@ class EnterActionIn(forms.Form):
             self.values = [None] * len(self.columns)
 
         for idx, column in enumerate(self.columns):
-
-            # Skip the key columns if flag is true
-            if not self.show_key and column.is_key:
-                continue
-
             self.fields[field_prefix + '%s' % idx] = \
                 column_to_field(column,
                                 self.values[idx],
@@ -182,7 +216,14 @@ class EmailActionBasicForm(forms.Form):
     track_read = forms.BooleanField(
         initial=False,
         required=False,
-        label="Track email reading in an extra column?"
+        label="Track email reading?"
+    )
+
+    add_column = forms.BooleanField(
+        initial=False,
+        required=False,
+        label="Add column to track email reading?",
+        help_text="Number of times the email was opened."
     )
 
     def __init__(self, *args, **kargs):
@@ -203,6 +244,15 @@ class EmailActionBasicForm(forms.Form):
         self.fields['email_column'].choices = \
             [(x, x) for x in self.column_names]
 
+    def clean(self):
+        data = super(EmailActionBasicForm, self).clean()
+
+        if data['add_column'] and not data['track_read']:
+            self.add_error(
+                'track_read',
+                'To add a column, you need to track email reading'
+            )
+
     class Meta:
         widgets = {'subject': forms.TextInput(attrs={'size': 256})}
 
@@ -214,21 +264,3 @@ class EmailActionForm(EmailActionBasicForm):
         label="Download a snapshot of the current state of the workflow?",
         help_text="A zip file useful to review the emails sent."
     )
-
-class ActionImportForm(forms.Form):
-
-    # Action name
-    name = forms.CharField(
-        max_length=512,
-        strip=True,
-        required=True,
-        label='Name')
-
-    file = RestrictedFileField(
-        max_upload_size=str(ontask_prefs.MAX_UPLOAD_SIZE),
-        content_types=json.loads(str(ontask_prefs.CONTENT_TYPES)),
-        allow_empty_file=False,
-        label="File",
-        help_text='File containing a previously exported action')
-
-

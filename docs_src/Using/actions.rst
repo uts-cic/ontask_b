@@ -26,7 +26,9 @@ Actions In
 These actions allow you either instructors or students to introduce
 information in the table stored in a workflow. When providing information, you
 typically are interested in a subset of the rows (some of the learners) and a
-subset of the columns. For example, an instructor may like to check if a group of students is attending a face-to-face session, or if a group of students is engaging in a project discussion.
+subset of the columns (some of the factors). For example, you would like to
+check if a group of students is attending one face-to-face session, or if a
+group of students is engaging in a project discussion.
 
 These actions are edited using the screen shown in the following figure:
 
@@ -34,9 +36,12 @@ These actions are edited using the screen shown in the following figure:
    :align: center
    :width: 100%
 
-The page has several elements. From top to bottom, the first one is a filter to restrict the rows in the table considered for data entry. Those rows
-that satisfy the condition are prepared for data entry. The second part of the
-screen is a description that will be shown at the top of the page as a prelude for the fields to enter the data. The next section is they key column that will be used to match the data entry. The last section of the screen is a set of non-key columns to use to ask the questions. The *Preview* button at the bottom of the page shows the page that will be shown to the students. 
+The page has two elements. The first one is a filter to restrict the rows in
+the table considered for data entry. You create a condition, and those rows
+that satisfy it are then prepared for data entry. The second part of the
+screen is to select those columns that you want to include in the data entry
+form. You must select at least a *Unique* column (shown with green background)
+and a non-unique column.
 
 Once an *Action In* has been selected, there are two operations available
 represented by the buttons with labels *Run* and *URL*. The *Run* operation is
@@ -50,7 +55,7 @@ as illustrated in the next figure.
    :width: 100%
 
 An instructor may click in the link available in the right column and it is
-offered the possibility of modifying the information in the preselected
+offered the possibility of modifying the information in the pre-selected
 columns for that learner.
 
 .. figure:: images/Ontask____Enter_Data.png
@@ -80,7 +85,13 @@ personalized content is made available to the learners.
 Actions Out
 -----------
 
-These actions allow to create a resource (in a format close to HTML) and mark certain elements with conditions that will control its appearance in the final view. Think of these *actions out* as a resource (item, message, tip, comment) you would give learners during a experience. You may have several of these items prepared to be used at different points during the experience. The action is manipulated with the screen shown in the following figure
+These actions allow to create a resource (in a format
+close to HTML) and mark certain elements with conditions that will control its
+appearance in the final view. Think of these *actions out* as a resource
+(item, message, tip, comment) you would give learners during a experience. You
+may have several of these items prepared to be used at different points during
+the experience. The action is manipulated with the screen shown in the
+following figure
 
 .. figure:: images/Ontask____Edit_action1.png
    :align: center
@@ -99,11 +110,11 @@ following image shows an example of this condition.
 The Boolean expression is contained under the title **Formula**. The
 expression can be alternatively read as::
 
-  Days online = 0
+  Days_online_2 = 0
 
-The first element of the expression is the variable ``Days online_``. The
+The first element of the expression is the variable ``Days_online_2``. The
 second element is the equal sign, and the third component is the constant
-zero. The variable ``Days online`` may be replaced by any value in a
+zero. The variable ``Days_online_2`` may be replaced by any value in a
 procedure we call *evaluation*. So, if the expression is evaluated replacing
 the variable by the value 3, it results in :math:`3 = 0` which is false.
 Alternatively, if we evaluate the expression replacing ``Days_online_2`` with
@@ -118,7 +129,7 @@ These conditions can have nested sub-expressions and get complex fairly quickly.
 
 However, the underlying mechanism to evaluate them remains the same: replace
 variables with values and decide the result (true or false). OnTask relies on
-these expressions to personalize the content of the actions.
+these expressions to personalise the content of the actions.
 
 Let's now go back to the screen to edit an action. The area has four components
 
@@ -130,7 +141,7 @@ The filter
      :align: center
      :width: 100%
 
-  The name given to the expression is followed by how many table
+  The line below the button to edit the expression states how many table
   rows satisfy the filter condition (and therefore are selected). In
   practice, this is as if you dropped from the table some of the rows (it is
   just that they are ignored, not dropped.
@@ -146,7 +157,7 @@ The conditions
      :width: 100%
 
 The HTML text
-  This is the area to create the personalized document. It is a conventional
+  This is the area to create the personalised document. It is a conventional
   HTML editor offering the usual functionalities (inserting text in
   various forms, headings, lists, links, images, etc.) Right above the editor
   window you have two choice menus that you can use to insert either a
@@ -167,7 +178,7 @@ Using column values, attributes and conditions in an Action Out
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The purpose of this page is to allow you to create a text in the editor that
-may include three types of elements that are personalized for each row: an
+may include three types of elements that are personalised for each row: an
 attribute name, a column name or a condition.
 
 To insert an attribute name simply place the cursor in the text editor in the
@@ -205,20 +216,20 @@ Previewing the content of an Action Out
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Once a text is created, you need to verify that all the elements are properly
-visualized for each of the rows. This is the purpose of the ``Preview``
+visualised for each of the rows. This is the purpose of the ``Preview``
 button at the bottom of the page.
 
   .. figure:: images/Ontask____howtopreviewtext.gif
      :align: center
      :width: 100%
 
-Sending personalized emails
+Sending personalised emails
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 You now have created an action and verified its content using the
 *Preview* button. Go back to the *Actions* screen (showing the table with
 the actions you created in the workflow). The right-most column shows a
-button that reads *Email*.
+button that reads *Send Email*.
 
 .. figure:: images/Ontask____ActionsOperations.png
    :align: center
@@ -229,6 +240,7 @@ click in that button the platform asks you for additional information:
 
 .. figure:: images/Ontask____Email_action.png
    :align: center
+   :width: 60%
 
 The subject
   A line to be included as subject of all the emails.
@@ -251,13 +263,13 @@ Snapshot of the workflow
   In this new workflow you can check the values and messages at the time the
   operation was executed.
 
-Making personalized content available to learners
+Making personalised content available to learners
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Sending a personalized email is just one of various possible actions to do
-with a personalized text. Another one is to make the content available
+Sending a personalised email is just one of various possible actions to do
+with a personalised text. Another one is to make the content available
 through a URL that can then be given to the learners. OnTask offers this
-possibility through the button labeled ``URL`` followed by either the word
+possibility through the button labelled ``URL`` followed by either the word
 ``(Off)`` or ``(On)``.
 
 .. figure:: images/Ontask____ActionsOperations.png

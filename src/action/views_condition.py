@@ -13,7 +13,8 @@ from django.views import generic
 import logs
 import logs.ops
 from action import ops
-from dataops.formula_evaluation import evaluate_node_sql, get_variables
+from dataops import pandas_db
+from dataops.formula_evaluation import evaluate_node_sql
 from ontask.permissions import is_instructor, UserIsInstructor
 from workflow.ops import get_workflow
 from .forms import ConditionForm, FilterForm
@@ -54,21 +55,21 @@ def save_condition_form(request,
     # Context for rendering
     context = {'form': form,
                'action_id': action.id,
-               'condition_id': condition_id,
-               'add': is_new}
+               'condition_id': condition_id}
 
     # If the method is GET or the form is not valid, re-render the page.
     if request.method == 'GET' or not form.is_valid():
+
+        # If the request has the 'action_content' field, update the action
+        action_content = request.GET.get('action_content', None)
+        if action_content:
+            action.content = action_content
+            action.save()
+
         data['html_form'] = render_to_string(template_name,
                                              context,
                                              request=request)
         return JsonResponse(data)
-
-    # If the request has the 'action_content' field, update the action
-    action_content = request.POST.get('action_content', None)
-    if action_content:
-        action.content = action_content
-        action.save()
 
     if is_filter:
         # Process the filter form
@@ -78,7 +79,8 @@ def save_condition_form(request,
                                                is_filter=True).exists():
             # Should not happen. Go back to editing the action
             data['form_is_valid'] = True
-            data['html_redirect'] = ''
+            data['html_redirect'] = reverse('action:edit_out',
+                                            kwargs={'pk': action.id})
             return JsonResponse(data)
 
         log_type = 'filter'
@@ -112,8 +114,7 @@ def save_condition_form(request,
                 'A column name with that name already exists.')
             context = {'form': form,
                        'action_id': action.id,
-                       'condition_id': condition_id,
-                       'add': is_new}
+                       'condition_id': condition_id}
             data['html_form'] = render_to_string(template_name,
                                                  context,
                                                  request=request)
@@ -126,8 +127,7 @@ def save_condition_form(request,
                 'The workflow has an attribute with this name.')
             context = {'form': form,
                        'action_id': action.id,
-                       'condition_id': condition_id,
-                       'add': is_new}
+                       'condition_id': condition_id}
             data['html_form'] = render_to_string(template_name,
                                                  context,
                                                  request=request)
@@ -150,26 +150,25 @@ def save_condition_form(request,
 
     # Proceed to update the DB
     if is_new:
+        # Update the fields not in the form
+
         # Get the condition from the form, but don't commit as there are
         # changes pending.
         condition = form.save(commit=False)
+
         condition.action = action
         condition.is_filter = is_filter
         condition.save()
     else:
         condition = form.save()
 
-    # Update the number of selected rows for the conditions
-    condition.update_n_rows_selected()
+    if is_filter:
+        # Update the number of selected rows applying the new formula
+        action.n_selected_rows = \
+            pandas_db.num_rows(action.workflow.id, condition.formula)
 
-    # Update the columns field
-    condition.columns.set(
-        action.workflow.columns.filter(
-            name__in=get_variables(condition.formula))
-    )
-
-    # Update the condition
-    condition.save()
+    # Update the action
+    action.save()
 
     # Log the event
     formula, _ = evaluate_node_sql(condition.formula)
@@ -184,10 +183,10 @@ def save_condition_form(request,
                  condition.action.workflow,
                  {'id': condition.id,
                   'name': condition.name,
-                  'selected_rows': condition.n_rows_selected,
+                  'selected_rows': action.n_selected_rows,
                   'formula': formula})
 
-    data['html_redirect'] = ''
+    data['html_redirect'] = reverse('action:edit_out', kwargs={'pk': action.id})
     return JsonResponse(data)
 
 
@@ -197,11 +196,10 @@ class FilterCreateView(UserIsInstructor, generic.TemplateView):
     where the condition needs to be connected.
     """
     form_class = FilterForm
-    template_name = 'action/includes/partial_filter_addedit.html'
+    template_name = 'action/includes/partial_filter_create.html'
 
     def get_context_data(self, **kwargs):
         context = super(FilterCreateView, self).get_context_data(**kwargs)
-        context['add'] = True
         return context
 
     def get(self, request, *args, **kwargs):
@@ -264,9 +262,8 @@ def edit_filter(request, pk):
     form = FilterForm(request.POST or None, instance=cond_filter)
 
     # Render the form with the Condition information
-    return save_condition_form(request,
-                               form,
-                               'action/includes/partial_filter_addedit.html',
+    return save_condition_form(request, form,
+                               'action/includes/partial_filter_edit.html',
                                cond_filter.action,
                                cond_filter,  # Condition object
                                True)  # It is a filter
@@ -295,13 +292,6 @@ def delete_filter(request, pk):
 
     # Treat the two types of requests
     if request.method == 'POST':
-
-        # If the request has 'action_content', update the action
-        action_content = request.POST.get('action_content', None)
-        if action_content:
-            cond_filter.action.content = action_content
-            cond_filter.action.save()
-
         # Log the event
         formula, fields = evaluate_node_sql(cond_filter.formula)
         logs.ops.put(request.user,
@@ -309,21 +299,28 @@ def delete_filter(request, pk):
                      cond_filter.action.workflow,
                      {'id': cond_filter.id,
                       'name': cond_filter.name,
-                      'selected_rows': cond_filter.n_rows_selected,
+                      'selected_rows': cond_filter.action.n_selected_rows,
                       'formula': formula,
                       'formula_fields': fields}, )
-
-        # Get the action object for further processing
-        action = cond_filter.action
 
         # Perform the delete operation
         cond_filter.delete()
 
-        # Number of selected rows now needs to be updated in all remaining
-        # conditions
-        action.update_n_rows_selected()
+        # Action now has number of selected rows equal to 0
+        action = Action.objects.get(pk=cond_filter.action.id)
+        action.n_selected_rows = -1
+        action.save()
 
-        return JsonResponse({'form_is_valid': True, 'html_redirect': ''})
+        data['form_is_valid'] = True
+        data['html_redirect'] = reverse('action:edit_out',
+                                        kwargs={'pk': cond_filter.action.id})
+        return JsonResponse(data)
+
+    # If the request has the 'action_content', update the action
+    action_content = request.GET.get('action_content', None)
+    if action_content:
+        cond_filter.action.content = action_content
+        cond_filter.action.save()
 
     data['html_form'] = \
         render_to_string('action/includes/partial_filter_delete.html',
@@ -339,7 +336,7 @@ class ConditionCreateView(UserIsInstructor, generic.TemplateView):
     is the action id where the condition needs to point.
     """
     form_class = ConditionForm
-    template_name = 'action/includes/partial_condition_addedit.html'
+    template_name = 'action/includes/partial_condition_create.html'
 
     def get_context_data(self, **kwargs):
         context = super(ConditionCreateView, self).get_context_data(**kwargs)
@@ -407,7 +404,7 @@ def edit_condition(request, pk):
 
     # Render the form with the Condition information
     return save_condition_form(request, form,
-                               'action/includes/partial_condition_addedit.html',
+                               'action/includes/partial_condition_edit.html',
                                condition.action,
                                condition,
                                False)  # It is not new
@@ -440,12 +437,6 @@ def delete_condition(request, pk):
 
     # Treat the two types of requests
     if request.method == 'POST':
-        # If the request has the 'action_content', update the action
-        action_content = request.POST.get('action_content', None)
-        if action_content:
-            condition.action.content = action_content
-            condition.action.save()
-
         formula, fields = evaluate_node_sql(condition.formula)
         logs.ops.put(request.user,
                      'condition_delete',
@@ -461,6 +452,12 @@ def delete_condition(request, pk):
         data['html_redirect'] = reverse('action:edit_out',
                                         kwargs={'pk': condition.action.id})
         return JsonResponse(data)
+
+    # If the request has the 'action_content', update the action
+    action_content = request.GET.get('action_content', None)
+    if action_content:
+        condition.action.content = action_content
+        condition.action.save()
 
     data['html_form'] = \
         render_to_string('action/includes/partial_condition_delete.html',

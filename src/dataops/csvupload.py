@@ -3,6 +3,7 @@ from __future__ import unicode_literals, print_function
 
 from collections import Counter
 
+import pandas as pd
 from django.contrib.auth.decorators import user_passes_test
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -48,7 +49,7 @@ def csvupload1(request):
                        'wid': workflow.id,
                        'dtype': 'CSV',
                        'dtype_select': 'CSV file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # Process the reception of the file
     if not form.is_multipart():
@@ -67,14 +68,34 @@ def csvupload1(request):
                        'wid': workflow.id,
                        'dtype': 'CSV',
                        'dtype_select': 'CSV file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # Process CSV file using pandas read_csv
     try:
-        data_frame = pandas_db.load_df_from_csvfile(
+        data_frame = pd.read_csv(
             request.FILES['file'],
-            form.cleaned_data['skip_lines_at_top'],
-            form.cleaned_data['skip_lines_at_bottom'])
+            index_col=False,
+            infer_datetime_format=True,
+            quotechar='"',
+            skiprows=form.cleaned_data['skip_lines_at_top'],
+            skipfooter=form.cleaned_data['skip_lines_at_bottom'],
+        )
+
+        # Strip white space from all string columns and try to convert to
+        # datetime just in case
+        for x in list(data_frame.columns):
+            if data_frame[x].dtype.name == 'object':
+                # Column is a string!
+                data_frame[x] = data_frame[x].str.strip()
+
+                # Try the datetime conversion
+                try:
+                    series = pd.to_datetime(data_frame[x],
+                                            infer_datetime_format=True)
+                    # Datetime conversion worked! Update the data_frame
+                    data_frame[x] = series
+                except ValueError:
+                    pass
     except Exception as e:
         form.add_error('file',
                        'File could not be processed ({0})'.format(e.message))
@@ -83,7 +104,7 @@ def csvupload1(request):
                       {'form': form,
                        'dtype': 'CSV',
                        'dtype_select': 'CSV file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # If the frame has repeated column names, it will not be processed.
     if len(set(data_frame.columns)) != len(data_frame.columns):
@@ -96,7 +117,7 @@ def csvupload1(request):
                       {'form': form,
                        'dtype': 'CSV',
                        'dtype_select': 'CSV file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # If the data frame does not have any unique key, it is not useful (no
     # way to uniquely identify rows). There must be at least one.
@@ -110,7 +131,7 @@ def csvupload1(request):
                       {'form': form,
                        'dtype': 'CSV',
                        'dtype_select': 'CSV file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # Store the data frame in the DB.
     try:
@@ -125,7 +146,7 @@ def csvupload1(request):
                       {'form': form,
                        'dtype': 'CSV',
                        'dtype_select': 'CSV file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # Dictionary to populate gradually throughout the sequence of steps. It
     # is stored in the session.
@@ -133,7 +154,7 @@ def csvupload1(request):
         'initial_column_names': frame_info[0],
         'column_types': frame_info[1],
         'src_is_key_column': frame_info[2],
-        'step_1': reverse('dataops:csvupload1')
+        'step_1': 'dataops:csvupload1'
     }
 
     return redirect('dataops:upload_s2')

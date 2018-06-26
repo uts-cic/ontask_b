@@ -18,9 +18,10 @@ class PlotlyHandler(VisHandler):
     head_scripts = ["https://cdn.plot.ly/plotly-latest.min.js"]
 
     html_skel = """<div id="{id}" style="{style}"></div>
-        <script>Plotly.newPlot('{id}', {data}, 
-        {layout},
-        {{displaylogo: false}});</script>"""
+        <script>
+        Plotly.newPlot('{id}', {data}, {layout},
+        {{displaylogo: false}});
+        </script>"""
 
     def __init__(self, data, *args, **kwargs):
 
@@ -32,16 +33,12 @@ class PlotlyHandler(VisHandler):
 
         self.layout = {'margin': {'l': 35, 'r': 35, 't': 35, 'b': 35}}
 
-    @staticmethod
-    def get_engine_scripts(current=None):
+    def get_engine_scripts(self, current):
         """
         Return the HTML HEAD snippet including whatever <scripts> are required
         :return: String to include in HEAD
         """
-        if current is None:
-            return PlotlyHandler.head_scripts
-
-        for script in PlotlyHandler.head_scripts:
+        for script in self.head_scripts:
             if script not in current:
                 current.append(script)
         return current
@@ -146,8 +143,7 @@ class PlotlyColumnHistogram(PlotlyHandler):
         data_list = self.data[column].dropna().tolist()
         # Special case for bool and datetime. Turn into strings to be
         # treated as such
-        if column_dtype == 'boolean' or column_dtype == 'datetime' or \
-                column_dtype == 'string':
+        if column_dtype == 'boolean' or column_dtype == 'datetime':
             data_list = [str(x) for x in data_list]
 
         data.append(

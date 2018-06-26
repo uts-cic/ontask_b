@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import user_passes_test
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
-from dataops import ops
+from dataops import ops, pandas_db
 from ontask.permissions import is_instructor
 from workflow.ops import get_workflow
 from .forms import UploadExcelFileForm
@@ -51,7 +51,7 @@ def excelupload1(request):
                        'wid': workflow.id,
                        'dtype': 'Excel',
                        'dtype_select': 'Excel file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # Process the reception of the file
     if not form.is_multipart():
@@ -70,13 +70,13 @@ def excelupload1(request):
                        'wid': workflow.id,
                        'dtype': 'Excel',
                        'dtype_select': 'Excel file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # Process Excel file using pandas read_excel
     try:
         data_frame = pd.read_excel(
             request.FILES['file'],
-            sheet_name=form.cleaned_data['sheet'],
+            sheetname=form.cleaned_data['sheet'],
             index_col=False,
             infer_datetime_format=True,
             quotechar='"',
@@ -105,7 +105,7 @@ def excelupload1(request):
                       {'form': form,
                        'dtype': 'Excel',
                        'dtype_select': 'Excel file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # If the frame has repeated column names, it will not be processed.
     if len(set(data_frame.columns)) != len(data_frame.columns):
@@ -118,7 +118,7 @@ def excelupload1(request):
                       {'form': form,
                        'dtype': 'Excel',
                        'dtype_select': 'Excel file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # If the data frame does not have any unique key, it is not useful (no
     # way to uniquely identify rows). There must be at least one.
@@ -132,7 +132,7 @@ def excelupload1(request):
                       {'form': form,
                        'dtype': 'Excel',
                        'dtype_select': 'Excel file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # Store the data frame in the DB.
     try:
@@ -147,7 +147,7 @@ def excelupload1(request):
                       {'form': form,
                        'dtype': 'Excel',
                        'dtype_select': 'Excel file',
-                       'prev_step': reverse('dataops:uploadmerge')})
+                       'prev_step': reverse('dataops:list')})
 
     # Dictionary to populate gradually throughout the sequence of steps. It
     # is stored in the session.
@@ -155,7 +155,7 @@ def excelupload1(request):
         'initial_column_names': frame_info[0],
         'column_types': frame_info[1],
         'src_is_key_column': frame_info[2],
-        'step_1': reverse('dataops:excelupload1')
+        'step_1': 'dataops:excelupload1'
     }
 
     return redirect('dataops:upload_s2')

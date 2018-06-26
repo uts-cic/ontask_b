@@ -1,28 +1,25 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
-
-import logging.config
-import os
 # In production set the environment variable like this:
 #    DJANGO_SETTINGS_MODULE=ontask.settings.production
 import socket
 
-from .base import *  # NOQA
+from .base import *             # NOQA
+import logging.config
+
 
 # For security and performance reasons, DEBUG is turned off
 DEBUG = False
 TEMPLATE_DEBUG = False
 
 # Must mention ALLOWED_HOSTS in production!
+# ALLOWED_HOSTS = ["ontask.com"]
 ALLOWED_HOSTS = [socket.getfqdn()]
 
 # Additional middleware introduced by debug toolbar
 MIDDLEWARE_CLASSES += (
    'django.middleware.security.SecurityMiddleware',)
 
-#
-# Security features
-#
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000
@@ -31,11 +28,6 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_SSL_REDIRECT = True
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
-
-#
-# Folder to scan for plugins
-#
-DATAOPS_PLUGIN_DIRECTORY = os.path.join(PROJECT_PATH, 'plugins')
 
 # Cache the templates in memory for speed-up
 loaders = [

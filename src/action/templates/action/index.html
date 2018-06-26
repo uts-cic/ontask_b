@@ -18,10 +18,6 @@
       if (document.getElementById("action-table") != null) {
         // Required for DataTables
         $('#action-table').DataTable({
-          "search": {
-            "caseInsensitive": true,
-          },
-          stateSave: true,
           "language": {
             "emptyTable": "There are no actions for this workflow."
           },
@@ -54,15 +50,13 @@
       <span class="glyphicon glyphicon-plus"></span>
         New Action Out
     </button>
-    {% if has_table %}
-      <a href="{% url 'action:import' %}"
-         class="btn btn-primary"
-         data-toggle="tooltip" title="Import action previously exported">
-        <span class="glyphicon glyphicon-import"></span> Import action</a>
-    {% endif %}
   </p>
-  {% render_table table %}
-  <div class="modal fade" id="modal-item" data-backdrop="static" data-keyboard="false">
+
+  {% if table %}
+    {% render_table table %}
+  {% endif %}
+
+  <div class="modal fade" id="modal-item">
     <div class="modal-dialog">
       <div class="modal-content">
       </div>
