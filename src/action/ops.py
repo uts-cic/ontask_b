@@ -7,25 +7,17 @@ operations when cloning conditions and actions, and sending messages.
 from __future__ import unicode_literals, print_function
 
 import datetime
-import gzip
-import random
-from io import BytesIO
-
 import pytz
 from django.conf import settings as ontask_settings
 from django.contrib import messages
 from django.contrib.sites.models import Site
 from django.core import signing, mail
 from django.core.mail import send_mail, EmailMultiAlternatives
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import render, redirect
 from django.template import Context, Template, TemplateSyntaxError
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.html import strip_tags
-from rest_framework import serializers
-from rest_framework.parsers import JSONParser
-from rest_framework.renderers import JSONRenderer
 
 import logs.ops
 from action.evaluate import evaluate_row, evaluate_action
@@ -33,7 +25,6 @@ from action.forms import EnterActionIn, field_prefix
 from action.models import Action
 from dataops import pandas_db, ops
 from workflow.models import Column
-from workflow.serializers import ActionSelfcontainedSerializer
 from . import settings
 
 
@@ -56,10 +47,6 @@ def serve_action_in(request, action, user_attribute_name, is_inst):
 
     # Get the active columns attached to the action
     columns = [c for c in action.columns.all() if c.is_active]
-    if action.shuffle:
-        # Shuffle the columns if needed
-        rnd = random.seed(request.user)
-        random.shuffle(columns)
 
     # Get the row values. User_instance has the record used for verification
     row_pairs = pandas_db.get_table_row_by_key(
@@ -81,17 +68,15 @@ def serve_action_in(request, action, user_attribute_name, is_inst):
     # Bind the form with the existing data
     form = EnterActionIn(request.POST or None,
                          columns=columns,
-                         values=row_pairs.values(),
-                         show_key=is_inst)
+                         values=row_pairs.values())
 
-    cancel_url = None
     if is_inst:
         cancel_url = reverse('action:run', kwargs={'pk': action.id})
+    else:
+        cancel_url = reverse('action:thanks')
 
     # Create the context
-    context = {'form': form,
-               'action': action,
-               'cancel_url': cancel_url}
+    context = {'form': form, 'action': action, 'cancel_url': cancel_url}
 
     if request.method == 'GET' or not form.is_valid():
         return render(request, 'action/run_row.html', context)
@@ -106,15 +91,11 @@ def serve_action_in(request, action, user_attribute_name, is_inst):
     # Post with different data. # Update content in the DB
     set_fields = []
     set_values = []
-    where_field = 'email'
-    where_value = request.user.email
+    where_field = None
+    where_value = None
     log_payload = []
     # Create the SET name = value part of the query
     for idx, column in enumerate(columns):
-        if not is_inst and column.is_key:
-            # If it is a learner request and a key column, skip
-            continue
-
         value = form.cleaned_data[field_prefix + '%s' % idx]
         if column.is_key:
             if not where_field:
@@ -132,10 +113,6 @@ def serve_action_in(request, action, user_attribute_name, is_inst):
                          set_values,
                          [where_field],
                          [where_value])
-
-    # Recompute all the values of the conditions in each of the actions
-    for act in action.workflow.actions.all():
-        act.update_n_rows_selected()
 
     # Log the event
     logs.ops.put(request.user,
@@ -167,25 +144,21 @@ def serve_action_out(user, action, user_attribute_name):
     action_content = evaluate_row(action, (user_attribute_name,
                                            user.email))
 
-    payload = {'action': action.name,
-               'action_id': action.id}
-
     # If the action content is empty, forget about it
-    response = action_content
     if action_content is None:
-        response = render_to_string('action/action_unavailable.html', {})
-        payload['error'] = 'Action not enabled for user ' + user.email
+        raise Http404
 
     # Log the event
     logs.ops.put(
         user,
         'action_served_execute',
         workflow=action.workflow,
-        payload=payload
+        payload={'action': action.name,
+                 'action_id': action.id}
     )
 
     # Respond the whole thing
-    return HttpResponse(response)
+    return HttpResponse(action_content)
 
 
 def clone_condition(condition, new_action=None, new_name=None):
@@ -287,7 +260,8 @@ def send_messages(user,
                   email_column,
                   from_email,
                   send_confirmation,
-                  track_read):
+                  track_read,
+                  add_column):
     """
     Performs the submission of the emails for the given action and with the
     given subject. The subject will be evaluated also with respect to the
@@ -299,6 +273,7 @@ def send_messages(user,
     :param from_email: Email of the sender
     :param send_confirmation: Boolean to send confirmation to sender
     :param track_read: Should read tracking be included?
+    :param add_column: Should a new column be added?
     :return: Send the emails
     """
 
@@ -315,7 +290,7 @@ def send_messages(user,
 
     track_col_name = ''
     data_frame = None
-    if track_read:
+    if add_column:
         data_frame = pandas_db.load_from_db(action.workflow.id)
         # Make sure the column name does not collide with an existing one
         i = 0  # Suffix to rename
@@ -324,13 +299,6 @@ def send_messages(user,
             track_col_name = 'EmailRead_{0}'.format(i)
             if track_col_name not in data_frame.columns:
                 break
-
-    # Update the number of filtered rows if the action has a filter (table
-    # might have changed)
-    filter = action.conditions.filter(is_filter=True).first()
-    if filter and filter.n_rows_selected != len(result):
-        filter.n_rows_selected = len(result)
-        filter.save()
 
     # Everything seemed to work to create the messages.
     msgs = []
@@ -348,10 +316,9 @@ def send_messages(user,
             }
 
             track_str = \
-                """<img src="https://{0}{1}{2}?v={3}" alt="" 
+                """<img src="https://{0}/{1}?v={2}" alt="" 
                     style="position:absolute; visibility:hidden"/>""".format(
                     Site.objects.get_current().domain,
-                    ontask_settings.BASE_URL,
                     reverse('trck'),
                     signing.dumps(track_id)
                 )
@@ -370,22 +337,22 @@ def send_messages(user,
         msgs.append(msg)
 
     # Mass mail!
-    try:
-        connection = mail.get_connection()
-        connection.send_messages(msgs)
-    except Exception as e:
-        # Something went wrong, notify above
-        return str(e)
+    if str(getattr(ontask_settings, 'EMAIL_HOST')):
+        try:
+            connection = mail.get_connection()
+            connection.send_messages(msgs)
+        except Exception as e:
+            # Something went wrong, notify above
+            return e.message
 
     # Add the column if needed
-    if track_read:
+    if add_column:
         # Create the new column and store
         column = Column(
             name=track_col_name,
             workflow=action.workflow,
             data_type='integer',
-            is_key=False,
-            position=action.workflow.ncols + 1
+            is_key=False
         )
         column.save()
 
@@ -420,7 +387,7 @@ def send_messages(user,
          'action': action.name,
          'num_messages': len(msgs),
          'email_sent_datetime': str(now),
-         'filter_present': filter is not None,
+         'filter_present': action.n_selected_rows != -1,
          'num_rows': action.workflow.nrows,
          'subject': subject,
          'from_email': user.email})
@@ -435,9 +402,9 @@ def send_messages(user,
         'action': action,
         'num_messages': len(msgs),
         'email_sent_datetime': now,
-        'filter_present': filter is not None,
+        'filter_present': action.n_selected_rows != -1,
         'num_rows': action.workflow.nrows,
-        'num_selected': filter.n_rows_selected if filter else -1}
+        'num_selected': action.n_selected_rows}
 
     # Create template and render with context
     try:
@@ -457,7 +424,7 @@ def send_messages(user,
          'action': action.id,
          'num_messages': len(msgs),
          'email_sent_datetime': str(now),
-         'filter_present': filter is not None,
+         'filter_present': action.n_selected_rows != -1,
          'num_rows': action.workflow.nrows,
          'subject': str(getattr(settings, 'NOTIFICATION_SUBJECT')),
          'body': text_content,
@@ -475,87 +442,4 @@ def send_messages(user,
     except Exception as e:
         return 'An error occurred when sending your notification: ' + e.message
 
-    return None
-
-
-def do_export_action(action):
-    """
-    Proceed with the action export.
-    :param action: Element to export.
-    :return: Page that shows a confirmation message and starts the download
-    """
-
-    # Context
-    context = {'workflow': action.workflow}
-
-    # Get the info to send from the serializer
-    serializer = ActionSelfcontainedSerializer(action, context=context)
-    to_send = JSONRenderer().render(serializer.data)
-
-    # Get the in-memory file to compress
-    zbuf = BytesIO()
-    zfile = gzip.GzipFile(mode='wb', compresslevel=6, fileobj=zbuf)
-    zfile.write(to_send)
-    zfile.close()
-
-    suffix = datetime.datetime.now().strftime('%y%m%d_%H%M%S')
-    # Attach the compressed value to the response and send
-    compressed_content = zbuf.getvalue()
-    response = HttpResponse(compressed_content)
-    response['Content-Type'] = 'application/octet-stream'
-    response['Content-Transfer-Encoding'] = 'binary'
-    response['Content-Disposition'] = \
-        'attachment; filename="ontask_action_{0}.gz"'.format(suffix)
-    response['Content-Length'] = str(len(compressed_content))
-
-    return response
-
-
-def do_import_action(user, workflow, name, file_item):
-    """
-    Receives a name and a file item (submitted through a form) and creates
-    the structure of action with conditions and columns
-
-    :param user: User record to use for the import (own all created items)
-    :param workflow: Workflow object to attach the action
-    :param name: Workflow name (it has been checked that it does not exist)
-    :param file_item: File item obtained through a form
-    :return:
-    """
-
-    try:
-        data_in = gzip.GzipFile(fileobj=file_item)
-        data = JSONParser().parse(data_in)
-    except IOError:
-        return 'Incorrect file. Expecting a GZIP file (exported workflow).'
-
-    # Serialize content
-    action_data = ActionSelfcontainedSerializer(
-        data=data,
-        context={'user': user, 'name': name, 'workflow': workflow}
-    )
-
-    # If anything goes wrong, return a string to show in the page.
-    action = None
-    try:
-        if not action_data.is_valid():
-            return 'Unable to import action:' + ' ' + action_data.errors
-
-        # Save the new workflow
-        action = action_data.save(user=user, name=name)
-    except (TypeError, NotImplementedError) as e:
-        return 'Unable to import action:  ' + e.message
-    except serializers.ValidationError as e:
-        return 'Unable to import action due to a validation error:' + e.message
-    except Exception as e:
-        return 'Unable to import action: ' + e.message
-
-
-    # Success
-    # Log the event
-    logs.ops.put(user,
-                 'workflow_import',
-                 workflow,
-                 {'id': workflow.id,
-                  'name': workflow.name})
     return None

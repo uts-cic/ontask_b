@@ -28,6 +28,40 @@ class WorkflowForm(forms.ModelForm):
         fields = ('name', 'description_text',)
 
 
+class AttributeForm(forms.Form):
+    def __init__(self, *args, **kwargs):
+        self.form_fields = kwargs.pop('form_fields')
+        super(AttributeForm, self).__init__(*args, **kwargs)
+
+        # Create the set of fields
+        for key, val_field, val in self.form_fields:
+            # Field for the key
+            self.fields[key] = forms.CharField(
+                max_length=1024,
+                initial=key,
+                strip=True,
+                label='')
+
+            # Field for the value
+            self.fields[val_field] = forms.CharField(
+                max_length=1024,
+                initial=val,
+                label='')
+
+    def clean(self):
+        data = super(AttributeForm, self).clean()
+
+        new_keys = [data[x] for x, _, _ in self.form_fields]
+
+        # Check that there were not duplicate keys given
+        if len(set(new_keys)) != len(new_keys):
+            raise forms.ValidationError(
+                'Repeated names are not allowed'
+            )
+
+        return data
+
+
 class AttributeItemForm(forms.Form):
     # Key field
     key = forms.CharField(max_length=1024,
@@ -73,15 +107,7 @@ class ColumnBasicForm(forms.ModelForm):
     raw_categories = forms.CharField(
         strip=True,
         required=False,
-        label='Comma separated list of values allowed in this column')
-
-    data_type_choices = [
-        ('double', 'number'),
-        ('integer', 'number'),
-        ('string', 'string'),
-        ('boolean', 'boolean'),
-        ('datetime', 'datetime')
-    ]
+        label='Comma separated list of allowed values')
 
     def __init__(self, *args, **kwargs):
 
@@ -93,10 +119,7 @@ class ColumnBasicForm(forms.ModelForm):
         self.fields['raw_categories'].initial = \
             ', '.join([str(x) for x in self.instance.get_categories()])
 
-        self.fields['data_type'].choices = self.data_type_choices
-
     def clean(self):
-
         data = super(ColumnBasicForm, self).clean()
 
         # Load the data frame from the DB for various checks and leave it in
@@ -173,8 +196,7 @@ class ColumnBasicForm(forms.ModelForm):
 
     class Meta:
         model = Column
-        fields = ['name', 'description_text', 'data_type',
-                  'position', 'raw_categories',
+        fields = ['name', 'description_text', 'data_type', 'raw_categories',
                   'active_from', 'active_to']
 
         widgets = {
@@ -197,21 +219,15 @@ class ColumnAddForm(ColumnBasicForm):
     )
 
     def __init__(self, *args, **kwargs):
-
         super(ColumnAddForm, self).__init__(*args, **kwargs)
-
         self.initial_valid_value = None
 
-        self.fields['data_type'].choices = self.data_type_choices[1:]
-
     def clean(self):
-
         data = super(ColumnAddForm, self).clean()
 
         # Try to convert the initial value ot the right type
         initial_value = data['initial_value']
         if initial_value:
-            # See if the given value is allowed for the column data type
             try:
                 self.initial_valid_value = Column.validate_column_value(
                     data['data_type'],
@@ -223,23 +239,10 @@ class ColumnAddForm(ColumnBasicForm):
                     'Incorrect initial value'
                 )
 
-            categories = self.instance.get_categories()
-            if categories and self.initial_valid_value not in categories:
-                self.add_error(
-                    'initial_value',
-                    'This value is not in the list of allowed values'
-                )
-
-        # Check and force a correct column index
-        ncols = Column.objects.filter(workflow__id = self.workflow.id).count()
-        if data['position'] < 1 or data['position'] > ncols:
-            data['position'] = ncols + 1
-
         return data
 
     class Meta(ColumnBasicForm.Meta):
-        fields = ['name', 'description_text', 'data_type',
-                  'position', 'active_from',
+        fields = ['name', 'description_text', 'data_type', 'active_from',
                   'active_to']
 
 
@@ -278,15 +281,10 @@ class ColumnRenameForm(ColumnBasicForm):
                 )
                 return data
 
-        # Check and force a correct column index
-        ncols = Column.objects.filter(workflow__id = self.workflow.id).count()
-        if data['position'] < 1 or data['position'] > ncols:
-            data['position'] = ncols
-
         return data
 
     class Meta(ColumnBasicForm.Meta):
-        fields = ['name', 'description_text', 'data_type', 'position', 'is_key',
+        fields = ['name', 'description_text', 'data_type', 'is_key',
                   'active_from', 'active_to']
 
 
@@ -350,17 +348,11 @@ class FormulaColumnAddForm(forms.ModelForm):
             )
             return data
 
-        # Check and force a correct column index
-        ncols = self.wf_columns.count()
-        if data['position'] < 1 or data['position'] > ncols:
-            data['position'] = ncols + 1
-
         return data
 
     class Meta(ColumnBasicForm.Meta):
         fields = ['name',
                   'description_text',
-                  'position',
                   'op_type',
                   'columns',
                   'active_from',

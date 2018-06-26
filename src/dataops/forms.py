@@ -3,147 +3,14 @@ from __future__ import unicode_literals, print_function
 
 import json
 
-from datetimewidget.widgets import DateTimeWidget
 from django import forms
-from django.utils.dateparse import parse_datetime
 
 import ontask.ontask_prefs
-from dataops.models import SQLConnection
-from ontask.forms import RestrictedFileField, column_to_field, dateTimeOptions
+from ontask.forms import RestrictedFileField, column_to_field
 
 # Field prefix to use in forms to avoid using column names (they are given by
 # the user and may pose a problem (injection bugs)
 field_prefix = '___ontask___upload_'
-
-
-# Form to select a subset of the columns
-class SelectColumnForm(forms.Form):
-    """
-    Form to select a subset of columns
-    """
-
-    # Columns to combine
-    columns = forms.ModelMultipleChoiceField(
-        label='Input Columns (to read   data)',
-        queryset=None,
-        required=False,
-        help_text='To select a subset of the dataframe to pass to the plugin')
-
-    def __init__(self, *args, **kwargs):
-        self.workflow = kwargs.pop('workflow', None)
-        self.plugin_instance = kwargs.pop('plugin_instance', None)
-
-        super(SelectColumnForm, self).__init__(*args, **kwargs)
-
-        if self.plugin_instance.input_column_names != []:
-            # The set of columns is fixed, remove the field.
-            self.fields.pop('columns')
-        else:
-            # The queryset for the columns must be extracted from the
-            # workflow and should only include the non-key columns
-            self.fields['columns'].queryset = self.workflow.columns.filter(
-                is_key=False
-            )
-
-        # Field to choose the Key column to merge the results
-        self.fields['merge_key'] = forms.ChoiceField(
-            initial=('', '---'),
-            label='Key column for merging',
-            required=True,
-            help_text='One of the existing key columns to merge the results',
-            choices=[('', '---')] + [(x, x) for x in
-                                     self.workflow.columns.filter(is_key=True)]
-        )
-
-        # Add the fields for the output column names
-        for idx, cname in enumerate(self.plugin_instance.output_column_names):
-            self.fields[field_prefix + 'output_%s' % idx] = forms.CharField(
-                initial=cname,
-                label='Name for result column "{0}"'.format(cname),
-                strip=True,
-                required=False,
-            )
-
-        self.fields['out_column_suffix'] = forms.CharField(
-            initial='',
-            label='Suffix to add to result columns (empty to ignore)',
-            strip=True,
-            required=False,
-            help_text=
-            'Added to all output column names. Useful to keep results from '
-            'several executions in separated columns.'
-        )
-
-        for idx, (k, p_type, p_allow, p_init, p_help) in \
-                enumerate(self.plugin_instance.parameters):
-
-            if p_allow:
-                new_field = forms.ChoiceField(
-                    choices=[(x, x) for x in p_allow],
-                    required=False,
-                    label=k,
-                    help_text=p_help)
-            elif p_type == 'integer':
-                new_field = forms.IntegerField(
-                    label=k,
-                    required=False,
-                    help_text=p_help
-                )
-            elif p_type == 'double':
-                new_field = forms.FloatField(
-                    label=k,
-                    required=False,
-                    help_text=p_help
-                )
-            elif p_type == 'string':
-                new_field = forms.CharField(
-                    max_length=1024,
-                    strip=True,
-                    required=False,
-                    label=k,
-                    help_text=p_help
-                )
-            elif p_type == 'boolean':
-                new_field = forms.BooleanField(
-                    required=False,
-                    label=k,
-                    help_text=p_help
-                )
-            else:  # p_type == 'datetime':
-                new_field = forms.DateTimeField(
-                    required=False,
-                    label=k,
-                    widget=DateTimeWidget(
-                        options=dateTimeOptions,
-                        usel10n=True,
-                        bootstrap_version=3),
-                    help_text=p_help
-                )
-
-            # Set the initial value of each field
-            if p_allow:
-                new_field.initial = (p_init, p_init)
-            else:
-                if p_type == 'datetime':
-                    new_field.initial = parse_datetime(p_init)
-                else:
-                    new_field.initial = p_init
-
-            # Insert the new_field in the form
-            self.fields[field_prefix + 'parameter_%s' % idx] = new_field
-
-    def clean(self):
-
-        data = super(SelectColumnForm, self).clean()
-
-        columns = data.get('columns', None)
-        if columns and columns.count() == 0:
-            self.add_error(
-                'columns',
-                'The plugin needs at least one input column'
-            )
-
-        return data
 
 
 # Step 1 of the CSV upload
@@ -214,14 +81,13 @@ class UploadExcelFileForm(forms.Form):
         label="",
         help_text='File in Excel format (.xls or .xlsx)')
 
-    sheet = forms.CharField(
-        max_length=512,
-        required=True,
-        initial='',
-        help_text='Sheet within the excelsheet to upload')
+    sheet = forms.CharField(max_length=512,
+                            required=True,
+                            initial='Sheet 1')
 
 
-class SQLConnectionForm(forms.ModelForm):
+# Step 1 of the CSV upload
+class UploadSQLForm(forms.Form):
     """
     Form to read data from SQL. We collect information to create a Database URI
     to be used by SQLAlchemy:
@@ -229,35 +95,67 @@ class SQLConnectionForm(forms.ModelForm):
     dialect[+driver]://user:password@host/dbname[?key=value..]
     """
 
-    class Meta:
-        model = SQLConnection
-
-        fields = [
-            'name',
-            'description_txt',
-            'conn_type',
-            'conn_driver',
-            'db_user',
-            'db_password',
-            'db_host',
-            'db_port',
-            'db_name',
-            'db_table'
-        ]
-
-
-# Step 1 of the CSV upload
-class SQLRequestPassword(forms.Form):
-    """
-    Form to ask for a password for a SQL connection execution
-    """
-
-    password = forms.CharField(
-        max_length=2048,
-        widget=forms.PasswordInput,
+    dialect = forms.CharField(
+        label='Dialect',
+        max_length=512,
         required=True,
-        help_text='Password to authenticate the database connection')
+        initial='',
+        help_text='Database type (mysql, oracle, postgresql, etc.'
+    )
 
+    driver = forms.CharField(
+        label='Driver',
+        max_length=512,
+        required=False,
+        initial='',
+        help_text='Name of the driver implementing the DBAPI'
+    )
+
+    dbusername = forms.CharField(
+        max_length=512,
+        label="Database user name",
+        required=False,
+        initial='',
+        help_text='User name to connect'
+    )
+
+    dbpassword = forms.CharField(
+        label='Database password',
+        required=False,
+        widget=forms.PasswordInput
+    )
+
+    host = forms.CharField(
+        label='Host',
+        max_length=512,
+        required=True,
+        help_text='Host to connect (include port if needed)'
+    )
+
+    dbname = forms.CharField(
+        label='Database name',
+        max_length=512,
+        required=True,
+        help_text='Name of the database'
+    )
+
+    query = forms.CharField(
+        label='Query',
+        required=True,
+        widget=forms.Textarea,
+        help_text='SQL query or table name to read'
+    )
+
+    def clean(self):
+        data = super(UploadSQLForm, self).clean()
+
+        if 'localhost' in data['host'] or '127.0.0' in data['host']:
+            self.add_error(
+                'host',
+                'Given host value is not accepted for security reasons.'
+            )
+
+        return data
 
 # Form to select columns to upload and rename
 class SelectColumnUploadForm(forms.Form):
@@ -273,16 +171,13 @@ class SelectColumnUploadForm(forms.Form):
 
         # Names of the columns to process and Boolean stating if they are key
         self.column_names = kargs.pop('column_names')
-        self.columns_to_upload = kargs.pop('columns_to_upload')
         self.is_key = kargs.pop('is_key')
 
         super(SelectColumnUploadForm, self).__init__(*args, **kargs)
 
         # Create as many fields as the given columns
-        for idx, (c, upload) in enumerate(zip(self.column_names,
-                                              self.columns_to_upload)):
+        for idx, c in enumerate(self.column_names):
             self.fields['upload_%s' % idx] = forms.BooleanField(
-                initial=upload,
                 label='',
                 required=False,
             )
@@ -313,20 +208,34 @@ class SelectColumnUploadForm(forms.Form):
 
 # Step 3 of the CSV upload: select unique keys to merge
 class SelectKeysForm(forms.Form):
-    how_merge_choices = [
-        ('', '- Choose row selection method -'),
-        ('outer', '1) Select all rows in both the existing and new table'),
-        ('inner', '2) Select only the rows with keys present in both the '
-                  'existing and new table'),
-        ('left', '3) Select only the rows with keys in the existing table'),
-        ('right', '4) Select only the rows with keys in the new table'),
-    ]
+    how_merge_choices = [('left', 'only the keys in the table'),
+                         ('right', 'only the new keys'),
+                         ('outer', 'the union of the table and new keys '
+                                   '(outer)'),
+                         ('inner', 'the intersection of the table and new'
+                                   ' keys (inner)')]
 
-    dst_help = "Key column in the existing table to match with the new table."
+    how_dup_columns_choices = [('override', 'override columns with new data'),
+                               ('rename', 'be renamed and become new columns.')]
 
-    src_help = "Key column in the new table to match with the existing table."
+    dst_help = """Key column in the existing table to match with the new 
+    data."""
 
-    merge_help = "Select one method to see detailed information"
+    src_help = """Key column in the new table to match with the existing data."""
+
+    merge_help = """How the keys in the table and the file are used for the 
+    merge: 1) If only the keys from the table are used, any row in the file 
+    with a key value not in the table is removed (default). 2) If only the 
+    keys from the file are used, any row in the table with a key value not 
+    in the file is removed. 3) If the union of keys is used, no row is 
+    removed, but some rows will have empty values. 4) If the intersection of 
+    the keys is used, only those rows with keys in both the table and the 
+    file will be updated, the rest will be deleted."""
+
+    how_dup_columns_help = """The new data has columns with names identical 
+    to those that are already part of the table. You may choose to override
+    them with the new data, or rename the new data and add them as new 
+    columns."""
 
     def __init__(self, *args, **kargs):
         # Get the dst choices
@@ -343,7 +252,7 @@ class SelectKeysForm(forms.Form):
         src_choice_initial = \
             next((v for x, v in enumerate(src_choices)
                   if v[0] == src_selected_key),
-                 ('', '- Select merge option -'))
+                 ('', '---'))
 
         how_merge = kargs.pop('how_merge', None)
         how_merge_initial = \
@@ -351,28 +260,45 @@ class SelectKeysForm(forms.Form):
                   if v[0] == how_merge),
                  None)
 
+        # Boolean telling us if we have to add field to handle overlapping
+        # column names
+        are_overlap_cols = kargs.pop('are_overlap_cols')
+        how_dup_columns = kargs.pop('how_dup_columns')
+
         super(SelectKeysForm, self).__init__(*args, **kargs)
 
         self.fields['dst_key'] = \
             forms.ChoiceField(initial=dst_choice_initial,
                               choices=dst_choices,
                               required=True,
-                              label='Key Column in Existing Table',
+                              label='Key Column in Table',
                               help_text=self.dst_help)
 
         self.fields['src_key'] = \
             forms.ChoiceField(initial=src_choice_initial,
                               choices=src_choices,
                               required=True,
-                              label='Key Column in New Table',
+                              label='Key Column in CSV',
                               help_text=self.src_help)
 
         self.fields['how_merge'] = \
             forms.ChoiceField(initial=how_merge_initial,
                               choices=self.how_merge_choices,
                               required=True,
-                              label='Method to select rows to merge/update',
+                              label='Merge rows using',
                               help_text=self.merge_help)
+
+        if are_overlap_cols:
+            how_dup_columns_initial = \
+                next((v for x, v in enumerate(self.how_dup_columns_choices)
+                      if v[0] == how_dup_columns), None)
+            self.fields['how_dup_columns'] = \
+                forms.ChoiceField(initial=how_dup_columns_initial,
+                                  choices=self.how_dup_columns_choices,
+                                  required=True,
+                                  label='Columns with already existing names'
+                                        ' will',
+                                  help_text=self.merge_help)
 
 
 # Form to allow value selection through unique keys in a workflow
@@ -411,11 +337,8 @@ class RowFilterForm(forms.Form):
                 raise Exception('Unable to process datatype', field_type)
 
 
+# Form to enter values in a row
 class RowForm(forms.Form):
-    """
-    Form to enter values for a table row
-    """
-
     def __init__(self, *args, **kargs):
 
         # Store the instance
@@ -439,11 +362,5 @@ class RowForm(forms.Form):
             self.fields[field_name] = \
                 column_to_field(column, self.initial_values[idx])
 
-            if column.is_key:
-                if self.initial_values[idx]:
-                    self.fields[field_name].widget.attrs['readonly'] = \
-                        'readonly'
-                else:
-                    self.fields[field_name].required = True
-            elif column.data_type == 'integer':
-                self.fields[field_name].required = True
+            if column.is_key and self.initial_values[idx]:
+                self.fields[field_name].widget.attrs['readonly'] = 'readonly'

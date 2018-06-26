@@ -4,8 +4,8 @@ from __future__ import unicode_literals, print_function
 from django.conf.urls import url
 from rest_framework.urlpatterns import format_suffix_patterns
 
-from . import attribute_views, column_views, import_export_views, share_views, \
-    views, api
+from . import attribute_views, column_views, import_export_views, share_views
+from . import views, api
 
 app_name = 'workflow'
 
@@ -85,26 +85,6 @@ urlpatterns = [
     url(r'^(?P<pk>\d+)/column_clone/$',
         column_views.column_clone,
         name='column_clone'),
-
-    url(r'^(?P<pk>\d+)/column_move_prev/$',
-        column_views.column_move_prev,
-        name='column_move_prev'),
-
-    url(r'^(?P<pk>\d+)/column_move_next/$',
-        column_views.column_move_next,
-        name='column_move_next'),
-
-    url(r'^(?P<pk>\d+)/column_move_top/$',
-        column_views.column_move_top,
-        name='column_move_top'),
-
-    url(r'^(?P<pk>\d+)/column_move_bottom/$',
-        column_views.column_move_bottom,
-        name='column_move_bottom'),
-
-    url(r'^(?P<pk>\d+)/column_restrict/$',
-        column_views.column_restrict_values,
-        name='column_restrict'),
 
     # API
 

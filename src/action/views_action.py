@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
 
-from django.db import IntegrityError
-
-from visualizations.plotly import PlotlyHandler
-
 try:
     import urlparse
     from urllib import urlencode
@@ -35,9 +31,9 @@ from .forms import (
     ActionForm,
     EditActionOutForm,
     EnableURLForm,
-    ActionDescriptionForm, ActionImportForm)
-from action.ops import serve_action_in, serve_action_out, clone_action, \
-    do_export_action, do_import_action
+    EditActionInForm
+)
+from action.ops import serve_action_in, serve_action_out, clone_action
 from .models import Action, Condition
 
 
@@ -54,7 +50,6 @@ class ActionTable(tables.Table):
 
     is_out = tables.Column(verbose_name=str('Type'))
 
-
     description_text = tables.Column(verbose_name=str('Description'))
 
     modified = tables.DateTimeColumn(verbose_name='Modified')
@@ -65,8 +60,8 @@ class ActionTable(tables.Table):
         template_context=lambda record: {
             'id': record['id'],
             'is_out': int(record['is_out']),
-            'is_correct': record['is_correct'],
-            'serve_enabled': record['serve_enabled']}
+            'serve_enabled': record['serve_enabled']
+        }
     )
 
     def render_is_out(self, record):
@@ -82,7 +77,8 @@ class ActionTable(tables.Table):
 
         sequence = ('name', 'description_text', 'is_out', 'modified')
 
-        exclude = ('content', 'serve_enabled', 'columns', 'filter')
+        exclude = ('n_selected_rows', 'content', 'serve_enabled',
+                   'columns', 'filter')
 
         attrs = {
             'class': 'table display table-bordered',
@@ -92,33 +88,6 @@ class ActionTable(tables.Table):
         row_attrs = {
             'style': 'text-align:center;',
             'class': lambda record: 'success' if record['is_out'] else ''
-        }
-
-
-class ColumnSelectedTable(tables.Table):
-    """
-    Table to render the columns selected for a given action in
-    """
-    name = tables.Column(verbose_name=str('Name'))
-    description_text = tables.Column(
-        verbose_name=str('Description (shown to learners)'),
-        default='',
-    )
-
-    # Template to render the extra column created dynamically
-    ops_template = 'action/includes/partial_column_selected_operations.html'
-
-    class Meta:
-        fields = ('name', 'description_text', 'operations')
-        attrs = {
-            'class': 'table display table-bordered',
-            'id': 'column-selected-table'
-        }
-
-        row_attrs = {
-            'style': 'text-align:center;',
-            'class': lambda record:
-            'danger' if not record['description_text'] else '',
         }
 
 
@@ -159,25 +128,24 @@ def save_action_form(request, form, is_out, template_name):
             if not workflow:
                 redirect('workflow:index')
 
-            if is_new:  # Action is New. Update user and workflow fields
-                action_item.user = request.user
-                action_item.workflow = workflow
-
             # Verify that that action does comply with the name uniqueness
             # property (only with respec to other actions)
-            try:
-                action_item.save()
-                form.save_m2m()  # Propagate the save effect to M2M relations
-            except IntegrityError as e:
-                # There is an action with this name already
-                form.add_error('name',
-                               'An action with that name already exists')
-                data['html_form'] = render_to_string(
-                    template_name,
-                    {'form': form,
-                     'is_out': int(is_out)},
-                    request=request)
-                return JsonResponse(data)
+            if is_new:  # Action is New
+                if Action.objects.filter(workflow=workflow,
+                                         workflow__user=request.user,
+                                         name=action_item.name).exists():
+                    # There is an action with this name already
+                    form.add_error('name',
+                                   'An action with that name already exists')
+                    data['html_redirect'] = reverse('action:index')
+                else:
+                    # Correct New action. Proceed with the
+                    action_item.user = request.user
+                    action_item.workflow = workflow
+                    action_item.n_selected_rows = -1
+
+            # Save item in the DB now
+            action_item.save()
 
             # Log the event
             logs.ops.put(request.user,
@@ -229,23 +197,19 @@ def action_index(request):
 
     # Get the actions
     actions = Action.objects.filter(
-        workflow__id=workflow.id)
+        workflow__id=workflow.id).values('id',
+                                         'name',
+                                         'description_text',
+                                         'is_out',
+                                         'modified',
+                                         'serve_enabled')
 
     # Context to render the template
-    context = {'has_table': ops.workflow_has_table(workflow)}
+    context = {}
 
     # Build the table only if there is anything to show (prevent empty table)
-    qset = []
-    for action in actions:
-        qset.append({'id': action.id,
-                     'name': action.name,
-                     'description_text': action.description_text,
-                     'is_out': action.is_out,
-                     'is_correct': action.is_correct,
-                     'modified': action.modified,
-                     'serve_enabled': action.serve_enabled})
-
-    context['table'] = ActionTable(qset, orderable=False)
+    if actions.count() > 0:
+        context['table'] = ActionTable(actions, orderable=False)
 
     return render(request, 'action/index.html', context)
 
@@ -306,103 +270,6 @@ class ActionUpdateView(UserIsInstructor, generic.DetailView):
 
 
 @user_passes_test(is_instructor)
-def edit_description(request, pk):
-    """
-    Edit the description attached to an action
-
-    :param request: AJAX request
-    :param pk: Action ID
-    :return: AJAX response
-    """
-
-    # Try to get the workflow first
-    workflow = get_workflow(request)
-    if not workflow:
-        return JsonResponse({'form_is_valid': True,
-                             'html_redirect': reverse('workflow:index')})
-
-    # Get the action
-    try:
-        action = Action.objects.filter(
-            Q(workflow__user=request.user) |
-            Q(workflow__shared=request.user)).distinct().get(pk=pk)
-    except ObjectDoesNotExist:
-        return JsonResponse({'form_is_valid': True,
-                             'html_redirect': reverse('action:index')})
-
-    # Initial result. In principle, re-render page
-    data = {'form_is_valid': False}
-
-    # Create the form
-    form = ActionDescriptionForm(request.POST or None,
-                                 instance=action)
-
-    # Process the POST
-    if request.method == 'POST' and form.is_valid():
-        # Save item in the DB
-        action.save()
-
-        # Log the event
-        logs.ops.put(request.user,
-                     'action_update',
-                     action.workflow,
-                     {'id': action.id,
-                      'name': action.name,
-                      'workflow_id': workflow.id,
-                      'workflow_name': workflow.name})
-
-        # Request is correct
-        data['form_is_valid'] = True
-        data['html_redirect'] = ''
-
-        # Enough said. Respond.
-        return JsonResponse(data)
-
-    data['html_form'] = render_to_string(
-        'action/includes/partial_action_edit_description.html',
-        {'form': form, 'action': action},
-        request=request)
-
-    return JsonResponse(data)
-
-
-@user_passes_test(is_instructor)
-@csrf_exempt
-def action_out_save_content(request, pk):
-    """
-
-    :param request: HTTP request (POST)
-    :param pk: Action ID
-    :return: Nothing, changes reflected in the DB
-    """
-
-    # Try to get the workflow first
-    workflow = get_workflow(request)
-    if not workflow:
-        return JsonResponse({})
-
-    # Get the action
-    try:
-        action = Action.objects.filter(
-            Q(workflow__user=request.user) |
-            Q(workflow__shared=request.user)).distinct().get(pk=pk)
-    except ObjectDoesNotExist:
-        return JsonResponse({})
-
-    # Wrong type of action.
-    if not action.is_out:
-        return JsonResponse({})
-
-    # If the request has the 'action_content', update the action
-    action_content = request.POST.get('action_content', None)
-    if action_content:
-        action.content = action_content
-        action.save()
-
-    return JsonResponse({})
-
-
-@user_passes_test(is_instructor)
 def edit_action_out(request, pk):
     """
     View to handle the AJAX form to edit an action (editor, conditions,
@@ -425,16 +292,14 @@ def edit_action_out(request, pk):
     except ObjectDoesNotExist:
         return redirect('action:index')
 
-    if not action.is_out:
-        # Trying to edit an incorrect action. Redirect to index
-        return redirect('action:index')
-
     # Create the form
     form = EditActionOutForm(request.POST or None, instance=action)
 
     # See if the action has a filter or not
     try:
-        filter_condition = Condition.objects.get(action=action, is_filter=True)
+        filter_condition = Condition.objects.get(
+            action=action, is_filter=True
+        )
     except Condition.DoesNotExist:
         filter_condition = None
     except Condition.MultipleObjectsReturned:
@@ -445,7 +310,14 @@ def edit_action_out(request, pk):
     # Conditions to show in the page as well.
     conditions = Condition.objects.filter(
         action=action, is_filter=False
-    ).order_by('created')
+    ).order_by('created').values('id', 'name')
+
+    # Boolean to find out if there is a table attached to this workflow
+    has_data = ops.workflow_has_table(action.workflow)
+
+    # Get the total number of rows in DF and those selected by filter.
+    total_rows = workflow.nrows
+    selected_rows = action.n_selected_rows
 
     # Context to render the form
     context = {'filter_condition': filter_condition,
@@ -454,16 +326,15 @@ def edit_action_out(request, pk):
                'query_builder_ops': workflow.get_query_builder_ops_as_str(),
                'attribute_names': [x for x in workflow.attributes.keys()],
                'column_names': workflow.get_column_names(),
-               'selected_rows':
-                   filter_condition.n_rows_selected if filter_condition else -1,
-               'has_data': ops.workflow_has_table(action.workflow),
-               'total_rows': workflow.nrows,
-               'form': form,
-               'vis_scripts': PlotlyHandler.get_engine_scripts()
-               }
+               'selected_rows': selected_rows,
+               'has_data': has_data,
+               'total_rows': total_rows,
+               'form': form}
 
     # Processing the request after receiving the text from the editor
     if request.method == 'POST':
+        # Get the next step
+        next_step = request.POST['Submit']
 
         if form.is_valid():
             content = form.cleaned_data.get('content', None)
@@ -472,7 +343,7 @@ def edit_action_out(request, pk):
             # This seems to be only possible if dealing directly with Jinja2
             # instead of Django.
             try:
-                render_template(content, {}, action)
+                render_template(content, {})
             except Exception as e:
                 # Pass the django exception to the form (fingers crossed)
                 form.add_error(None, e.message)
@@ -492,8 +363,8 @@ def edit_action_out(request, pk):
             action.content = content
             action.save()
 
-            # Closing, return to index if save-and-close is given
-            if request.POST['Submit'] == 'Save-and-close':
+            # Closing
+            if next_step == 'Save-and-close':
                 return redirect('action:index')
 
     # Return the same form in the same page
@@ -506,9 +377,8 @@ def edit_action_in(request, pk):
     View to handle the AJAX form to edit an action in (filter + columns).
     :param request: Request object
     :param pk: Action PK
-    :return: HTTP response
+    :return: JSON response
     """
-
     # Check if the workflow is locked
     workflow = get_workflow(request)
     if not workflow:
@@ -529,272 +399,27 @@ def edit_action_in(request, pk):
     except ObjectDoesNotExist:
         return redirect('action:index')
 
-    if action.is_out:
-        # Trying to edit an incorrect action. Redirect to index
-        return redirect('action:index')
-
-    # See if the action has a filter or not
-    try:
-        filter_condition = Condition.objects.get(
-            action=action, is_filter=True
-        )
-    except Condition.DoesNotExist:
-        filter_condition = None
-    except Condition.MultipleObjectsReturned:
-        return render(request, 'error.html',
-                      {'message': 'Malfunction detected when retrieving filter '
-                                  '(action: {0})'.format(action.id)})
-
-    # Get the number of rows in DF selected by filter.
-    if filter_condition:
-        filter_condition.n_rows_selected = \
-            pandas_db.num_rows(action.workflow.id, filter_condition.formula)
-        filter_condition.save()
-
-    # Column names suitable to insert
-    columns_selected = action.columns.filter(is_key=False).order_by('position')
-    columns_to_insert = [c for c in workflow.columns.all()
-                         if not c.is_key and c not in columns_selected]
-
-    # Has key column and has no-key column
-    has_no_key = action.columns.filter(is_key=False).exists()
-    has_empty_description = columns_selected.filter(
-        description_text=''
-    ).exists()
+    # Create the form
+    form = EditActionInForm(data=request.POST or None,
+                            workflow=workflow,
+                            instance=action)
 
     # Create the context info.
     ctx = {'action': action,
-           'filter_condition': filter_condition,
-           'selected_rows':
-               filter_condition.n_rows_selected if filter_condition else -1,
-           'total_rows': workflow.nrows,
            'query_builder_ops': workflow.get_query_builder_ops_as_str(),
-           'has_data': ops.workflow_has_table(action.workflow),
-           'key_selected': action.columns.filter(is_key=True).first(),
-           'columns_to_insert': columns_to_insert,
-           'column_selected_table': ColumnSelectedTable(
-               columns_selected.values('id', 'name', 'description_text'),
-               orderable=False,
-               extra_columns=[
-                   ('operations',
-                    OperationsColumn(
-                        verbose_name='Ops',
-                        template_file=ColumnSelectedTable.ops_template,
-                        template_context=lambda record: {'id': record['id'],
-                                                         'aid': action.id})
-                    )]
-           ),
-           'has_no_key': has_no_key,
-           'has_empty_description': has_empty_description}
+           'form': form, }
 
-    return render(request, 'action/edit_in.html', ctx)
-
-
-@user_passes_test(is_instructor)
-def export_ask(request, pk):
-    """
-    Function that asks for confirmation before exporting an action
-    :param request: HTTP request
-    :param pk: Action ID
-    :return: HTTP response to the next page where the export is done
-    """
-
-    # Get the workflow
-    workflow = get_workflow(request)
-    if not workflow:
-        return redirect('workflow:index')
-
-    action = Action.objects.filter(pk=pk).first()
-    if not action:
-        return redirect('action:index')
-
-    # GET request, simply render the form
-    return render(request,
-                  'action/export_ask.html',
-                  {'action': action,
-                   'cnames': [c.name for c in action.columns.all()]})
-
-
-@user_passes_test(is_instructor)
-def export_done(request, pk):
-    """
-    This request exports the action pointed by the pk
-    :param request:
-    :param pk: Unique key of the action to export
-    :return: HTTP response
-    """
-
-    # Get the workflow
-    workflow = get_workflow(request)
-    if not workflow:
-        return redirect('workflow:index')
-
-    action = Action.objects.filter(pk=pk).first()
-    if not action:
-        return redirect('action:index')
-
-    return render(request, 'action/export_done.html', {'action': action})
-
-
-@user_passes_test(is_instructor)
-def export_download(request, pk):
-    """
-    This request exports the action pointed by the pk
-    :param request:
-    :param pk: Unique key of the action to export
-    :return: HTTP response
-    """
-
-    # Get the workflow
-    workflow = get_workflow(request)
-    if not workflow:
-        return redirect('workflow:index')
-
-    action = Action.objects.filter(pk=pk).first()
-    if not action:
-        return redirect('action:index')
-
-    response = do_export_action(action)
-
-    return response
-
-
-@user_passes_test(is_instructor)
-def action_import(request):
-    """
-    This request imports one action given in a gz file
-    :param request: Http request
-    :return: HTTP response
-    """
-
-    # Get workflow
-    workflow = get_workflow(request)
-    if not workflow:
-        return redirect('workflow:index')
-
-    form = ActionImportForm(request.POST or None, request.FILES or None)
-
-    context = {'form': form}
-
-    # If a get request or the form is not valid, render the page.
+    # If it is a GET, or an invalid POST, render the template again
     if request.method == 'GET' or not form.is_valid():
-        return render(request, 'action/import.html', context)
+        return render(request, 'action/edit_in.html', ctx)
 
-    new_action_name = form.cleaned_data['name']
-    if Action.objects.filter(
-            workflow=workflow,
-            workflow__user=request.user,
-            name=new_action_name).exists():
-        # There is an action with this name. Return error.
-        form.add_error(None, 'An action with this name already exists')
-        return render(request, 'action/import.html', context)
+    # Valid POST request
 
-    # Process the reception of the file
-    if not form.is_multipart():
-        form.add_error(None, 'Incorrect form request (it is not multipart)')
-        return render(request, 'action/import.html', context)
+    # Save the element and populate the right columns
+    form.save()
 
-    # UPLOAD THE FILE!
-    status = do_import_action(request.user,
-                              workflow,
-                              form.cleaned_data['name'],
-                              request.FILES['file'])
-
-    # If something went wrong, show at to the top of the page
-    if status:
-        messages.error(request, status)
-
-    # Go back to the list of actions
-    return redirect('action:index')
-
-
-@user_passes_test(is_instructor)
-def select_column_action(request, apk, cpk, key=None):
-    """
-    Operation to add a column to action in
-    :param request: Request object
-    :param apk: Action PK
-    :param cpk: column PK
-    :return: JSON response
-    """
-    # Check if the workflow is locked
-    workflow = get_workflow(request)
-    if not workflow:
-        return reverse('workflow:index')
-
-    if workflow.nrows == 0:
-        messages.error(request,
-                       'Workflow has no data. '
-                       'Go to Dataops to upload data.')
-        return redirect(reverse('action:index'))
-
-    # Get the action and the columns
-    try:
-        action = Action.objects.filter(
-            Q(workflow__user=request.user) |
-            Q(workflow__shared=request.user)
-        ).distinct().prefetch_related('columns').get(pk=apk)
-    except ObjectDoesNotExist:
-        return redirect(reverse('action:index'))
-
-    # Get the column
-    try:
-        column = action.workflow.columns.get(pk=cpk)
-    except ObjectDoesNotExist:
-        return redirect(reverse('action:index'))
-
-    # Parameters are correct, so add the column to the action.
-    if key:
-        current_key = action.columns.filter(is_key=True).first()
-        if current_key:
-            action.columns.remove(current_key)
-        if column.is_key:
-            action.columns.add(column)
-    else:
-        action.columns.add(column)
-
-    return redirect(reverse('action:edit_in', kwargs={'pk': action.id}))
-
-
-@user_passes_test(is_instructor)
-def unselect_column_action(request, apk, cpk):
-    """
-    Operation to drop a column from action in
-    :param request: Request object
-    :param apk: Action PK
-    :param cpk: column PK
-    :return: JSON response
-    """
-    # Check if the workflow is locked
-    workflow = get_workflow(request)
-    if not workflow:
-        return reverse('workflow:index')
-
-    if workflow.nrows == 0:
-        messages.error(request,
-                       'Workflow has no data. '
-                       'Go to Dataops to upload data.')
-        return redirect(reverse('action:index'))
-
-    # Get the action and the columns
-    try:
-        action = Action.objects.filter(
-            Q(workflow__user=request.user) |
-            Q(workflow__shared=request.user)
-        ).distinct().prefetch_related('columns').get(pk=apk)
-    except ObjectDoesNotExist:
-        return redirect(reverse('action:index'))
-
-    # Get the column
-    try:
-        column = action.workflow.columns.get(pk=cpk)
-    except ObjectDoesNotExist:
-        return redirect(reverse('action:index'))
-
-    # Parameters are correct, so add the column to the action.
-    action.columns.remove(column)
-
-    return redirect(reverse('action:edit_in', kwargs={'pk': action.id}))
+    # Finish processing
+    return redirect(reverse('action:index'))
 
 
 def preview_response(request, pk, idx, template, prelude=None):
@@ -829,8 +454,8 @@ def preview_response(request, pk, idx, template, prelude=None):
         data['html_redirect'] = reverse('workflow:index')
         return JsonResponse(data)
 
-    # If the request has the 'action_content', update the action
-    action_content = request.POST.get('action_content', None)
+    # If the request has the 'action_content' field, update the action
+    action_content = request.GET.get('action_content', None)
     if action_content:
         action.content = action_content
         action.save()
@@ -839,8 +464,7 @@ def preview_response(request, pk, idx, template, prelude=None):
     idx = int(idx)
 
     # Get the total number of items
-    filter = action.conditions.filter(is_filter=True).first()
-    n_items = filter.n_rows_selected if filter else -1
+    n_items = action.n_selected_rows
     if n_items == -1:
         n_items = workflow.nrows
 
@@ -859,7 +483,7 @@ def preview_response(request, pk, idx, template, prelude=None):
     action_content = evaluate_row(action, idx)
     if action_content is None:
         action_content = \
-            "Error while retrieving content for student {0}".format(idx)
+            "Error while retrieving content for row {0}".format(idx)
 
     data['html_form'] = \
         render_to_string(template,
@@ -874,15 +498,12 @@ def preview_response(request, pk, idx, template, prelude=None):
     return JsonResponse(data)
 
 
-@csrf_exempt
 @user_passes_test(is_instructor)
 def preview(request, pk, idx):
     """
     HTML request and the primary key of an action to preview one of its
     instances. The request must provide and additional parameter idx to
-    denote which instance to show. The request must be POST because it may
-    include the current text in the action (with changes) and it needs to be
-    updated in the database.
+    denote which instance to show.
 
     :param request: HTML request object
     :param pk: Primary key of the an action for which to do the preview
@@ -1138,22 +759,22 @@ def run_ss(request, pk):
     # Get the column information from the request and the rest of values.
     search_value = request.POST.get('search[value]', None)
 
-    # Get columns and the position of the first key
+    # Get columns
     columns = action.columns.all()
     column_names = [x.name for x in columns]
-    key_idx = next(idx for idx, c in enumerate(columns) if c.is_key)
 
     # See if an order column has been given.
     if order_col:
         order_col = columns[int(order_col)]
 
+    # Find the first key column
+    key_name = column_names[0]
+    key_idx = 0
+
     # Get the search pairs of field, value
     cv_tuples = []
     if search_value:
         cv_tuples = [(c.name, search_value, c.data_type) for c in columns]
-
-    # Filter
-    filter = action.conditions.filter(is_filter=True).first()
 
     # Get the query set (including the filter in the action)
     qs = pandas_db.search_table_rows(
@@ -1163,7 +784,7 @@ def run_ss(request, pk):
         order_col.name,
         order_dir == 'asc',
         column_names,  # Column names in the action
-        filter.formula if filter else None
+        action.filter  # Filter in the action
     )
 
     # Post processing + adding operations
@@ -1177,16 +798,14 @@ def run_ss(request, pk):
         dst_url = reverse('action:run_row', kwargs={'pk': action.id})
         url_parts = list(urlparse.urlparse(dst_url))
         query = dict(urlparse.parse_qs(url_parts[4]))
-        query.update({'uatn': column_names[key_idx], 'uatv': row[key_idx]})
+        query.update({'uatn': column_names[0], 'uatv': row[0]})
         url_parts[4] = urlencode(query)
         link_item = '<a href="{0}">{1}</a>'.format(
-            urlparse.urlunparse(url_parts), row[key_idx]
+            urlparse.urlunparse(url_parts), row[0]
         )
-        row = list(row)
-        row[key_idx] = link_item
 
         # Add the row for rendering
-        final_qs.append(row)
+        final_qs.append([link_item] + list(row)[1:])
 
         if items == length:
             # We reached the number or requested elements, abandon loop

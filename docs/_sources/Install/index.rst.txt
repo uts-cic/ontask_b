@@ -5,7 +5,7 @@ Installation process
 ********************
 
 OnTask is a Web application that manages data about learners to provide them
-with personalized support. For this reason, it is recommended an installation
+with personalised support. For this reason, it is recommended an installation
 that observes a set of tight security restrictions. Some of these
 restrictions lie within the scope of the tool, but some other are part of the
 environment in which the application is installed. We strongly recommend to
@@ -23,23 +23,28 @@ But as with many other applications, OnTask requires a set of additional
 applications for its execution:
 
 - Python 2.7
-- Django 
+- Django (version 1.11)
 - Additional Django modules (included in the requirements/base.txt) file
-- Redis 
+- Redis (version 4.0 or later)
 - PostgreSQL (version 9.5 or later)
 
-Some of these requirements are handled through Python's package index application `pip <https://pypi.python.org/pypi/pip>`__.
+Some of these requirements are (hopefully) properly handled by
+Python through its package index application `pip <https://pypi.python
+.org/pypi/pip>`__.
 
 
 Installing the required tools
 =============================
 
-The following installation steps assume that you are deploying OnTask in a production web server capable of serving pages using the HTTPS protocol.
+The following installation steps assume that you are deploying OnTask in a
+production web server capable of serving pages using the HTTPS protocol.
 
 Install and Configure Redis
 ---------------------------
 
-Django requires Redis to execute as a daemon in the same machine to cache information about the sessions. No specific changes are required in the code, simply have the server running in the background.
+Django requires Redis to execute as a daemon in the same machine to cache
+information about the sessions. You do not need to make any adjustments in
+the code for this tool, simply have the server running in the background.
 
 1. Download and install `redis <https://redis.io/>`_.
 
@@ -48,7 +53,9 @@ Django requires Redis to execute as a daemon in the same machine to cache inform
 2. Test that it is executing properly in the background (use the ``ping``
    command in the command line interface.
 
-.. _install_postgresql:
+For OnTask you only need executing in the machine. If you use the default
+settings, there are not additional changes required in OnTask (the code is
+already using this application internally).
 
 Install and Configure PostgreSQL
 --------------------------------
@@ -59,14 +66,14 @@ Install and Configure PostgreSQL
    should be able to create new databases but not new roles and you should
    define a password for the user (use ``createuser --interactive -W``).
 
-#. Adjust the access configuration in postgresql (in the configuration file
+#. Adjust the access configuration in postgresql (usually in file
    ``pg_hba.conf``) to allow the newly created user to access databases locally.
 
 #. Create a new database with name ``ontask`` with the ``createdb`` command.
 
-#. Use the client application ``psql`` to verify that the user has access
+#. Use the client application ``psql`` to verify that the user has access to
    the newly created database and can create and delete a new table and run
-   regular queries. Test the connection with the following command::
+   regular queries. Try to connect to the database with the following command::
 
      psql -h 127.0.0.1 -U ontask -W ontask
 
@@ -86,40 +93,48 @@ interpreter and you can execute the python interpreter.
 
 #. Install `pip <https://pip.pypa.io/en/stable/>`__ (the package may be called
    ``python-pip``). This tool will be used by both Python and Django to install
-   additional libraries required to execute OnTask.
+   numerous libraries that are required to execute OnTask.
 
 Download, install and configure OnTask
 --------------------------------------
 
-1. Download or clone a copy of `OnTask <https://github.com/abelardopardo/ontask_b>`_.
+1. Download or clone_actions a copy of `OnTask <https://github.com/abelardopardo/ontask_b>`_.
 
 #. Using a command interpreter, go to the OnTask folder and locate a folder
-   inside it with name ``requirements``. Verify that it
-   contains the files ``base.txt``, ``production.txt`` and
+   inside it with name ``requirements``. Verify that the ``requirements``
+   folder contains the files ``base.txt``, ``production.txt`` and
    ``development.txt``. The first file contains a list of python modules that
    are required by OnTask. The second is a set of additional modules to run a
-   *production* instance, and the third is the same list if you intend to run a
+   *production* instance, and the third is a list if you intend to run a
    *development* instance.
 
-#. If you plan to run a production instance of OnTask execute the command (you may need administrative privileges to execute this command)::
+#. If you plan to run a production instance of OnTask execute the command::
 
      pip install -r requirements/production.txt
 
-   Alternatively, if you plan to run a development instance of OnTask,
+   Alternatively, if you plan to run a development instance of OnTask then
    execute the command::
 
      pip install -r requirements/development.txt
 
-   This command downloads  a set of libraries and modules and installs them as
-   part of the python libraries in the system. 
+   This command traverses a list of libraries and modules and installs them as
+   part of the python libraries in the system. These modules include Django,
+   Django Rest Framework, Django braces, etc.
 
-At this point you have the major modules in place. The next steps include the configuration of the Django environment to run OnTask. If you plan to install a production instance of OnTask, using a plain text editor (nano, vim, Emacs or similar) in a command line interpreter, open the file ``manage.py`` in the ``src`` folder of the project. Modify line 10 replacing the value ``"ontask.settings.development"`` by ``"ontask.settings.production"``. Save and close the file.
+At this point you have the major modules in place. The next steps include the
+configuration of the Django environment to run OnTask.
 
-Using the same plain text editor create a file with name ``local.env`` in the folder ``src/ontask/settings`` with the following content (note there is no space between variable names and the equal sign)::
+If you plan to install a production instance of OnTask, using a plain text
+editor (nano, vim, Emacs or similar) in a command line interpreter, open the
+file ``manage.py`` in the ``src`` folder of the project. Modify line 14
+replacing the value ``"ontask.settings.development"`` by
+``"ontask.settings.production"``. Save and close the file.
+
+Using the same plain text editor create a file with name ``local.env``
+in the folder ``src/ontask/settings`` with the following content (note there is
+no space between variable names and the equal sign)::
 
    TIME_ZONE='[YOUR LOCAL PYTHON TIME ZONE]'
-   BASE_URL=''
-   DOMAIN_NAME='[YOUR DOMAIN NAME]'
    # syntax: DATABASE_URL=postgres://username:password@127.0.0.1:5432/database
    DATABASE_URL=postgres://[PSQLUSERNAME]:[PSQLPWD]@127.0.0.1:5432/ontask
    SECRET_KEY=
@@ -131,11 +146,6 @@ Using the same plain text editor create a file with name ``local.env`` in the fo
 
    Replace ``[YOUR LOCAL PYTHON TIME ZONE]`` in the ``local.env`` file by the
    description of your time zone produced by the previous command.
-
-#. If OnTask is going to be served from a location different from the root of your server (for example ``myhost.com/ontask``, then modify the value of the variable ``BASE_URL`` with the suffix that should follow the domain name (in the example, ``/ontask``).
-
-#. Modify the line starting with ``DOMAIN_NAME=`` and change the field
-``[YOUR DOMAIN NAME``] with the domain name of the machine hosting OnTask.
 
 #. Modify the line starting with ``DATABASE_URL=`` and change the
    field ``[PSQLUSERNAME]`` with the name of the Postgresql user created in the
@@ -154,14 +164,18 @@ Using the same plain text editor create a file with name ``local.env`` in the fo
 
      SECRET_KEY=4o93jf0572094jv...
 
+
 #. Modify the line starting with ``LTI_OAUTH_CREDENTIALS`` and include a
    comma-separated list of pairs key=secret for LTI authentication. See the
    section  :ref:`authentication` for more details about this type of
    authentication.
 
-#. Create a new folder with name ``logs`` in the OnTask top folder (next to the ``requirements`` folder). This folder **is different** from the folder with the same name in the ``src`` folder.
+#. Create a new folder with name ``logs`` in the OnTask top folder (next to
+   the ``requirements`` folder). This folder **is different** from the folder
+   with the same name in the ``src`` folder.
 
-#. If at some point during the following steps you want to reset the content of the database, run the commands ``dropdb`` and ``createdb`` explained in :ref:`install_postgresql`.
+#. If at some point during the following steps you want to reset
+   the content of the database, run the commands ``dropdb`` and ``createdb``
 
 #. Execute the following commands from the ``src`` folder to prepare the
    database initialization::
@@ -279,7 +293,8 @@ Production Deployment
 
 Once OnTask is executing normally, you may configure a web server (nginx,
 apache or similar) to make it available to a community of users. The
-instructions to make such deployment are beyond the scope of this manual but are available through the corresponding manual pages of these applications.
+instructions to make such deployment are beyond the scope of this manual but
+they are available for users to consult.
 
 .. _authentication:
 
@@ -300,7 +315,7 @@ OnTask comes with the following authentication mechanisms: IMS-LTI,
 
   Ontask only provides two points of access for LTI requests coming from the
   consumer. One is the URL with suffix ``/lti_entry`` and the second is the
-  URL provided by the actions to serve the personalized content (accessible
+  URL provided by the actions to serve the personalised content (accessible
   through the ``Actions`` menu.
 
   To allow LTI access you need:
@@ -332,8 +347,6 @@ OnTask comes with the following authentication mechanisms: IMS-LTI,
   the ``REMOTE_USER`` variable. OnTask relies on emails as the user name
   differentiator, so if you plan to use this authentication method make sure
   the value of ``REMOTE_USER`` is the email.
-
-  Additionally, this mode of authentication will be enforced in all requests reaching OnTask. However, this configuration prevents the recording of email reads. Read the section :ref:`email_config` to configure the server to allow such functionality to be properly configured.
 
 - Basic authentication. If the variable ``REMOTE_USER`` is not set in the
   internal environment of Django where the web requests are served, OnTask
@@ -405,19 +418,7 @@ and are: ``EMAIL_HOST``, ``EMAIL_PORT``, ``EMAIL_HOST_USER``,
 ``EMAIL_HOST_PASSWORD``, ``EMAIL_USE_TLS`` and ``EMAIL_USE_SSL``.
 
 Set theses variables in the configuration file to the appropriate values
-before starting the application. Make sure the server is running **in production mode**. The development mode is configured to **not send** emails but show their content in the console instead.
-
-Tracking Email Reads
---------------------
-
-If OnTask is deployed using SAML, all URLs are likely to be configured to go through the authentication layer. This configuration prevents OnTask from receiving the email read confirmations. In this case, the web server needs to be configured so that the SAML authentication is removed for the url ``trck`` (the one receiving the email read tracking). In Apache, this can be achieved by the following directive::
-
-  <Location /trck>
-    Require all granted
-  </Location>
-
-If OnTask is not served from the root of your web server, make sure you include the absolute URL to ``trck``. For example, if OnTask is available through the URL ``my.server.com/somesuffix/ontask``, then the URL to use in the previous configuration is ``my.server.com/somesuffix/ontask/trck``.
-
+before starting the application.
 
 .. _scheduling_tasks:
 
@@ -473,98 +474,3 @@ frequency to suit your needs. Once adjusted, go to the administration menu in
 OnTask, open the section with name *Core Configuration*, click in the
 preferences and adjust the value of the *Minute interval to program scheduled
 tasks* and match it (in minutes) to the interval reflected in the crontab.
-
-.. _plugin_install:
-
-Plugins
-=======
-
-OnTask allows also the inclusion of arbitrary Python modules to execute and transform the data stored in a workflow. The Python code in the plugins is executed the same interpreter and execution environment as the rest of the platform. Thus, **use this functionality to execute only code that is fully trusted**. There is nothing preventing a plugin to run malicious code (think ``system.exec('rm -rf /')``, so use at your own risk. To configure the execution of plugins follow these steps:
-
-1. Create a folder at any location in your instance of OnTask to store the Python modules. OnTask assumes that each directory in that folder contains a Python module (that is, a folder with a file ``__init__.py`` inside).
-
-#. Open the administration page of OnTask as superuser and go to the section with title `Data Upload/Merge Operations`.
-
-#. Select the `Preferences` section.
-
-#. Modify the field `Folder where plugins are installed` to contain the absolute path to the folder created in your systems.
-
-#. Make sure that the Python interpreter that is currently executing the Django code is also capable of accessing and executing the code in the plugin folder.
-
-#. Restart the server to make sure this variable is properly updated. 
-
-#. To create a new plugin first create a folder in the plugin space previously configured. 
-
-#. Inside this new folder create a Python file with name ``__init__.py``. The file has to have a structure a shown in :download:`the following template <__init__.py>`:
-
-   .. literalinclude:: __init__.py
-      :language: python
-
-#. The menu *Dataops* at the top of the platform includes the page *Transform* that provides access to the plugins and its invocation with the current workflow.
- 
- .. _sql_connections:
-
-SQL Connections
-===============
-
-One of the key functionalities of OnTask is to be able to merge data from multiple sources. Section :ref:`dataops` describes the functionality available to perform these operations. Some of them, however, require additional configuration from the administrator. This is the case for the uploading and merging of data from a remote database that allows SQL connections. These connections must be defined by the administrator and then they are available to the instructors.
-
-The definition of these connections is done from the platform's home page, right after the table showing the available workflows.
-
-.. figure:: ../Using/images/Ontask____SQLtable.png
-   :align: center
-
-Each connection can be defined with the following parameters:
-
-.. figure:: ../Using/images/Ontask___SQLcreate.png
-   :align: center
-
-Name (required)
-  Name of the connection for reference purposes within the platform. This name must be unique across the entire platform.
-
-Description
-  A paragraph or two explaining more detail about this connection.
-
-Type (required)
-  Type of database connection to be used. Typical types include *postgres*, *mysql*, etc.
-
-Driver 
-  Driver to be used for the connection. OnTask assumes that these drivers are properly installed and available to the underlying Python interpreter running Django.
-
-User
-  User name to connect to the remote database.
-
-Requires password
-  Flag denoting if the connection requires password. If it does, the password will be required at execution time. This feature allows OnTask to avoid storing DB passwords.
-
-Host
-  Host name or IP storing the remote database
-
-Port
-  Port to use to connect to the remote host 
-
-DB Name (required)
-  Name of the remote database
-
-Table (required)
-  Name of the table stored in the remote database and containing the data to upload/merge
-
-Once a connection is defined, as described in :ref:`sql_connection_run`, all the data in the table will be accessed and loaded/merged into the current workflow.
-
-The operations allowed in each connection are:
-
-Edit
-  Change any of the parameters of the connection
-
-Clone
-  Create a duplicate of the connection (useful to reuse configuration parameters)
-
-Delete
-  Remove the connection from the platform.
-
-
-
-
-
-
-

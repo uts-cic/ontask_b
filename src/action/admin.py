@@ -13,6 +13,7 @@ class ActionAdmin(admin.ModelAdmin):
                     'description_text',
                     'created',
                     'modified',
+                    'n_selected_rows',
                     'content',
                     'serve_enabled'
                     )
@@ -24,7 +25,6 @@ class ConditionAdmin(admin.ModelAdmin):
                     'action',
                     'description_text',
                     'formula',
-                    'n_rows_selected',
                     'is_filter')
 
 

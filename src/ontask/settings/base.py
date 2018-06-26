@@ -10,14 +10,13 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-import os
-from os.path import dirname, join, exists
-
 import environ
-from django.contrib import messages
-from django.core.urlresolvers import reverse_lazy
-
+import os
 # import ldap
+
+from django.core.urlresolvers import reverse_lazy
+from os.path import dirname, join, exists
+from django.contrib import messages
 # from django_auth_ldap.config import (
 #     LDAPSearch,
 #     GroupOfNamesType,
@@ -32,21 +31,15 @@ env = environ.Env(
 
 # Ideally move env file should be outside the git repo
 # i.e. BASE_DIR.parent.parent
-env_file_name = os.environ.get('ENV_FILENAME', 'local.env')
-env_file = join(dirname(__file__), env_file_name)
+env_file = join(dirname(__file__), 'local.env')
 if exists(env_file):
-    print('Loading environment file {0}'.format(env_file_name))
     environ.Env.read_env(str(env_file))
-
-# Read various variables from the environment
-BASE_URL = env('BASE_URL')
-DOMAIN_NAME = env('DOMAIN_NAME')
 
 # Build paths inside the project like this: join(BASE_DIR(), "directory")
 BASE_DIR = environ.Path(__file__) - 3
 STATICFILES_DIRS = [join(BASE_DIR(), 'static')]
 MEDIA_ROOT = join(BASE_DIR(), 'media')
-MEDIA_URL = BASE_URL + "/media/"
+MEDIA_URL = "/media/"
 ONTASK_HELP_URL = "html/index.html"
 
 # Project root folder (needed somewhere in Django
@@ -86,11 +79,14 @@ TEMPLATES = [
 # Raises ImproperlyConfigured exception if SECRET_KEY not in os.environ
 SECRET_KEY = env('SECRET_KEY')
 
+ALLOWED_HOSTS = ['*']
+
 # Application definition
 
 INSTALLED_APPS = (
     'django_extensions',
     'django.contrib.auth',
+    'django_admin_bootstrapped',
     'django.contrib.admin',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -137,14 +133,6 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.cache.FetchFromCacheMiddleware',
     'django.middleware.locale.LocaleMiddleware'
 )
-
-PASSWORD_HASHERS = [
-    'django.contrib.auth.hashers.Argon2PasswordHasher',
-    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
-    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
-    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
-    'django.contrib.auth.hashers.BCryptPasswordHasher',
-]
 
 #
 # LDAP AUTHENTICATION
@@ -199,7 +187,7 @@ AUTHENTICATION_BACKENDS = [
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": env('REDIS_URL'),
+        "LOCATION": "redis://127.0.0.1:6379/1",
         "TIMEOUT": 1800,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
@@ -268,7 +256,8 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/dev/howto/static-files/
-STATIC_URL = BASE_URL + '/static/'
+
+STATIC_URL = '/static/'
 
 # Crispy Form Theme - Bootstrap 3
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
@@ -301,19 +290,15 @@ SUMMERNOTE_CONFIG = {
     'codemirror': {
         'theme': 'base16-dark',
         'mode': 'htmlmixed',
-        'lineNumbers': True,
-        'lineWrapping': True,
+        'lineNumbers': 'true',
+        'lineWrapping': 'true',
     },
     'lazy': True,
-    'disableDragAndDrop': True,
 }
 
 # Extra configuration options
 DATAOPS_CONTENT_TYPES = '["text/csv", "application/json", "application/gzip", "application/x-gzip", "application/vnd.ms-excel"]'
 DATAOPS_MAX_UPLOAD_SIZE = 209715200  # 200 MB
-
-# Raise because default of 1000 is too short
-DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
 # Email sever configuration
 EMAIL_HOST = ''

@@ -1869,7 +1869,6 @@
         "workflow": 149,
         "data_type": "integer",
         "is_key": true,
-        "position": 2,
         "categories": [],
         "active_from": null,
         "active_to": null
@@ -1884,7 +1883,6 @@
         "workflow": 149,
         "data_type": "string",
         "is_key": false,
-        "position": 4,
         "categories": [],
         "active_from": null,
         "active_to": null
@@ -1899,7 +1897,6 @@
         "workflow": 149,
         "data_type": "string",
         "is_key": true,
-        "position": 1,
         "categories": [],
         "active_from": null,
         "active_to": null
@@ -1914,7 +1911,6 @@
         "workflow": 149,
         "data_type": "double",
         "is_key": false,
-        "position": 3,
         "categories": [],
         "active_from": null,
         "active_to": null
@@ -1929,7 +1925,6 @@
         "workflow": 149,
         "data_type": "boolean",
         "is_key": false,
-        "position": 5,
         "categories": [],
         "active_from": null,
         "active_to": null
@@ -1944,7 +1939,6 @@
         "workflow": 149,
         "data_type": "datetime",
         "is_key": false,
-        "position": 6,
         "categories": [],
         "active_from": null,
         "active_to": null
@@ -1959,11 +1953,18 @@
         "description_text": "",
         "created": "2017-12-20T18:32:48.462Z",
         "modified": "2017-12-21T10:08:31.392Z",
+        "n_selected_rows": -1,
         "is_out": false,
         "serve_enabled": false,
         "active_from": null,
         "active_to": null,
         "content": "{% comment %}Your action content here{% endcomment %}",
+        "filter": {
+            "not": false,
+            "rules": [],
+            "valid": true,
+            "condition": "AND"
+        },
         "columns": [
             4786,
             4784
@@ -1979,11 +1980,13 @@
         "description_text": "",
         "created": "2017-12-20T18:36:19.151Z",
         "modified": "2017-12-21T10:09:20.355Z",
+        "n_selected_rows": -1,
         "is_out": true,
         "serve_enabled": false,
         "active_from": null,
         "active_to": null,
         "content": "<p><br></p>",
+        "filter": {},
         "columns": []
     }
 }

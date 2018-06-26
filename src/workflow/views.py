@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
 
+from collections import OrderedDict
+
 import django_tables2 as tables
 from django.conf import settings
 from django.contrib import messages
@@ -17,9 +19,8 @@ from django.views.decorators.http import require_http_methods
 
 import action
 import logs.ops
+from action.models import Condition
 from dataops import ops, pandas_db
-from dataops.models import SQLConnection
-from dataops.sqlcon_views import SQLConnectionTableAdmin
 from ontask.permissions import is_instructor, UserIsInstructor
 from ontask.tables import OperationsColumn
 from .forms import WorkflowForm
@@ -27,7 +28,7 @@ from .models import Workflow, Column
 from .ops import (get_workflow,
                   unlock_workflow_by_id,
                   get_user_locked_workflow,
-                  flush_workflow)
+                  detach_dataframe)
 
 
 class WorkflowTable(tables.Table):
@@ -152,8 +153,7 @@ def save_workflow_form(request, form, template_name):
 
     # Here we can say that the form processing is done.
     data['form_is_valid'] = True
-    data['html_redirect'] = reverse('workflow:detail',
-                                    kwargs={'pk': form.instance.id})
+    data['html_redirect'] = reverse('workflow:index')
 
     return JsonResponse(data)
 
@@ -180,29 +180,10 @@ def workflow_index(request):
 
     # We include the table only if it is not empty.
     context = {}
-    context['table'] = WorkflowTable(workflows,
-                                     id='workflow-table',
-                                     orderable=False)
-
-    # Add the SQL connection table only if appropriate
-    if request.user.is_superuser:
-        conns = SQLConnection.objects.all().values(
-            'id',
-            'name',
-            'description_txt',
-            'conn_type',
-            'conn_driver',
-            'db_user',
-            'db_password',
-            'db_host',
-            'db_port',
-            'db_name',
-            'db_table'
-        )
-
-        context['table2'] = SQLConnectionTableAdmin(conns,
-                                                    id='sqlconn-table',
-                                                    orderable=False)
+    if workflows.count() > 0:
+        context['table'] = WorkflowTable(workflows,
+                                         id='workflow-table',
+                                         orderable=False)
 
     return render(request, 'workflow/index.html', context)
 
@@ -241,16 +222,9 @@ class WorkflowDetailView(UserIsInstructor, generic.DetailView):
         obj = get_workflow(self.request, old_obj.id)
         if not obj:
             user = get_user_locked_workflow(old_obj)
-            if user != self.request.user:
-                messages.error(
-                    self.request,
-                    'The workflow is being modified by user ' + user.email)
-            else:
-                messages.error(
-                    self.request,
-                    'There is another session still open with your account. '
-                    'Log that session out or wait for it to expire.'
-                )
+            messages.error(
+                self.request,
+                'The workflow is being modified by user ' + user.email)
             return None
 
         # Remember the current workflow
@@ -277,32 +251,15 @@ class WorkflowDetailView(UserIsInstructor, generic.DetailView):
                 'num_actions': self.object.actions.all().count(),
                 'num_attributes': len(self.object.attributes)}
 
-        # Get the key columns
-        columns = Column.objects.filter(
+        # put the number of key columns in the workflow
+        context['num_key_columns'] = Column.objects.filter(
             workflow__id=workflow_id,
             is_key=True
-        )
-
-        # put the number of key columns in the workflow
-        context['num_key_columns'] = columns.count()
-
-        # Guarantee that column position is set for backward compatibility
-        columns = self.object.columns.all()
-        if any(x.position == 0 for x in columns):
-            # At least a column has index equal to zero, so reset all of them
-            for idx, c in enumerate(columns):
-                c.position = idx + 1
-                c.save()
+        ).count()
 
         # Safety check for consistency (only in development)
         if settings.DEBUG:
             assert pandas_db.check_wf_df(self.object)
-
-            # Columns are properly numbered
-            cpos = Column.objects.filter(
-                workflow__id=workflow_id
-            ).values_list('position', flat=True)
-            assert sorted(cpos) == range(1, len(cpos) + 1)
 
         return context
 
@@ -335,11 +292,10 @@ def update(request, pk):
                    'You can only rename workflows you created.')
     if request.is_ajax():
         data = {'form_is_valid': True,
-                'html_redirect': reverse('workflow:detail',
-                                         kwargs={'pk': workflow.id})}
+                'html_redirect': reverse('workflow:index')}
         return JsonResponse(data)
 
-    return redirect('workflow:detail', kwargs={'pk': workflow.id})
+    return redirect('workflow:index')
 
 
 @user_passes_test(is_instructor)
@@ -366,7 +322,7 @@ def flush(request, pk):
 
     if request.method == 'POST':
         # Delete the table
-        flush_workflow(workflow)
+        detach_dataframe(workflow)
 
         # Log the event
         logs.ops.put(request.user,
@@ -374,6 +330,18 @@ def flush(request, pk):
                      workflow,
                      {'id': workflow.id,
                       'name': workflow.name})
+
+        # Delete the conditions attached to all the actions attached to the
+        # workflow.
+        to_delete = Condition.objects.filter(
+            action__workflow=workflow)
+        for item in to_delete:
+            logs.ops.put(request.user,
+                         'condition_delete',
+                         workflow,
+                         {'id': item.id,
+                          'name': item.name})
+        to_delete.delete()
 
         # In this case, the form is valid
         data['form_is_valid'] = True
@@ -415,10 +383,6 @@ def delete(request, pk):
                      workflow,
                      {'id': workflow.id,
                       'name': workflow.name})
-
-        # And drop the table
-        if pandas_db.is_wf_table_in_db(workflow):
-            pandas_db.delete_table(pk)
 
         # Perform the delete operation
         workflow.delete()
@@ -480,8 +444,8 @@ def column_ss(request, pk):
         qs = qs.order_by(col_name)
 
     if search_value:
-        qs = qs.filter(Q(name__icontains=search_value) |
-                       Q(data_type__icontains=search_value))
+        qs = qs.filter(Q(name__contains=search_value) |
+                       Q(data_type__contains=search_value))
         recordsFiltered = len(qs)
 
     # Creating the result
@@ -492,22 +456,13 @@ def column_ss(request, pk):
             {'id': col.id, 'is_key': col.is_key}
         )
 
-        # The data type for integers or doubles is shown as 'number'
-        col_data_type = col.data_type
-        if col_data_type == 'integer' or col_data_type == 'double':
-            col_data_type = 'number'
-
-        final_qs.append({
-            'number': render_to_string(
-                 'workflow/includes/workflow_column_movement.html',
-                 {'column': col}
-             ),
-            'name': col.name,
-            'type': col_data_type,
-            'key': '<span class="true">✔</span>' \
-                if col.is_key else '<span class="true">✘</span>',
-            'operations': ops_string
-        })
+        final_qs.append([
+            col.name,
+            col.data_type,
+            '<span class="true">✔</span>' if col.is_key \
+                  else '<span class="true">✘</span>',
+            ops_string
+        ])
 
         if len(final_qs) == length:
             break
@@ -568,7 +523,7 @@ def clone(request, pk):
         workflow.save()
     except IntegrityError:
         data['form_is_valid'] = True
-        data['html_redirect'] = reverse('workflow:detail',
+        data['html_redirect'] = reverse('workflow:details',
                                         kwargs={'pk': workflow.id})
         messages.error(request, 'Unable to clone workflow')
         return JsonResponse(data)

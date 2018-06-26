@@ -14,7 +14,6 @@
     <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
     <script src="{% static 'site/js/sol.js' %}"></script>
     <script src="{% static 'workflow/js/workflow.js' %}{% otv %}"></script>
-    <script src="{% static 'workflow/js/column_move.js' %}{% otv %}"></script>
     <script src="https://cdn.datatables.net/1.10.16/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.10.16/js/dataTables.bootstrap.min.js"></script>
     <script type="text/javascript">
@@ -22,27 +21,20 @@
           // Required for DataTables
           $(document).ready(function() {
               $('#column-table').DataTable({
-                  "stateSave": true,
-                  "processing": true,
-                  "serverSide": true,
-                  "ajax": {
+                  processing: true,
+                  serverSide: true,
+                  ajax: {
                     url: "{% url 'workflow:column_ss' workflow.id %}",
                     type: 'POST',
                   },
-                  "columns": [
-                    {"data": "number", "class": "dt-center"},
-                    {"data": "name", "class": "dt-center"},
-                    {"data": "type", "class": "dt-center"},
-                    {"data": "key", "class": "dt-center"},
-                    {"data": "operations", "class": "dt-center operations"},
-                  ],
                   "order": [],
                   "columnDefs": [
-                      {"orderable": false, "targets": "_all"},
-                      {"searchable": false, "targets": "operations"},
+                      {"className": "dt-center", "targets": "_all"},
+                      {"orderable": false, "targets": 3},
+                      {"searchable": false, "targets": 3},
                   ],
                   "createdRow": function(row, data, dataIndex) {
-                      if (data['key'] == '<span class="true">✔</span>') {
+                      if (data[2] == '<span class="true">✔</span>') {
                         $(row).addClass('success');
                       }
                   },
@@ -56,40 +48,35 @@
     </script>
   {% endif %}
 {% endblock %}
-{% block title %}{{ block.super }}Details{% endblock %}
+{% block title %}{{ block.super }}{{ workflow.name }}{% endblock %}
 {% block container %}
 <div class="container-fluid text-center">
   <h1 class="page-header">Workflow Details</h1>
   {% if workflow %}
     <div style="display: inline-block;" id="workflow-area">
-      {% if not table_info %}
-        <p><strong>The workflow does not have data.</strong></p>
-        <h4>Go to <a href="{% url 'dataops:uploadmerge' %}">Dataops</a> to
-          upload data</h4>
-      {% endif %}
       {% include 'workflow/includes/workflow_detail_buttons.html' %}
-      <p class="help-block"
-         style="max-width:400px;text-align:center;"><strong>Description
-        </strong>: {{ workflow.description_text }}</p>
+      <p class="help-block">Description: {{ workflow.description_text }}</p>
       <p class="help-block">Last modified: {{ workflow.modified }}</p>
       {% if table_info %}
         <p class="help-block">{{ table_info.num_rows }} rows, {{ table_info.num_cols }} columns (<mark>{{ num_key_columns }} Key columns</mark>), {{ table_info.num_actions }} actions, {{ table_info.num_attributes }}
         attributes.</p>
-        <table class="table display dataTable no-footer cell-border table-bordered"
+        <table class="table display dataTable no-footer table-bordered"
                id="column-table">
           <thead>
             <tr>
-              <th class="number">#</th>
-              <th class="name">Name</th>
-              <th class="type">Type</th>
-              <th class="key">Key?</th>
-              <th class="operations">Operations</th>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Key?</th>
+              <th></th>
             </tr>
           </thead>
         </table>
+      {% else %}
+        <p>The workflow does not have data.</p>
+        <p>Go to <a href="{% url 'dataops:list' %}">DataOps</a> to upload data</p>
       {% endif %}
     </div>
-    <div class="modal fade" id="modal-item" data-backdrop="static" data-keyboard="false">
+    <div class="modal fade" id="modal-item">
       <div class="modal-dialog">
         <div class="modal-content">
         </div>

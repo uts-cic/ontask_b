@@ -50,7 +50,8 @@ def request_data(request, pk):
                                    form.cleaned_data['email_column'],
                                    request.user.email,
                                    form.cleaned_data['send_confirmation'],
-                                   form.cleaned_data['track_read'])
+                                   form.cleaned_data['track_read'],
+                                   form.cleaned_data['add_column'])
 
             if result:
                 # Something went wrong
@@ -69,8 +70,7 @@ def request_data(request, pk):
                               context)
 
     # Get the number of rows from the action
-    filter = action.conditions.filter(is_filter=True).first()
-    num_msgs = filter.n_rows_selected if filter else -1
+    num_msgs = action.n_selected_rows
     if num_msgs == -1:
         # There is no filter in the action, so take the number of rows
         num_msgs = workflow.nrows
@@ -96,14 +96,12 @@ def preview(request, pk, idx):
     :return:
     """
 
-    subject_content = request.GET.get('subject_content',
-                                      'THE SUBJECT WILL BE INSERTED HERE')
     return preview_response(
         request,
         pk,
         idx,
         'action/includes/partial_email_preview.html',
-        subject_content)
+        'THE SUBJECT WILL BE INSERTED HERE')
 
     # This function is redundant, but I thought I could include here the
     # subject, but it is too soon in the workflow and it is still unsubmitted.

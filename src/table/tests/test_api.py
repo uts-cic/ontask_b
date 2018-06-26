@@ -2,6 +2,7 @@
 from __future__ import unicode_literals, print_function
 
 import os
+import json
 
 import pandas as pd
 from django.conf import settings
@@ -13,7 +14,6 @@ from dataops import pandas_db, ops
 from table import serializers
 from workflow.models import Workflow, Column
 from workflow.ops import workflow_delete_column
-
 
 class TableApiBase(test.OntaskApiTestCase):
     fixtures = ['simple_table']
@@ -326,7 +326,8 @@ class TableApiMerge(TableApiBase):
                 "src_df": self.new_table,
                 "how": "inner",
                 "left_on": "sid",
-                "right_on": "sid"
+                "right_on": "sid",
+                "dup_column": "override"
             },
             format='json')
 
@@ -351,7 +352,8 @@ class TableApiMerge(TableApiBase):
                 "src_df": serializers.df_to_string(r_df),
                 "how": "inner",
                 "left_on": "sid",
-                "right_on": "sid"
+                "right_on": "sid",
+                "dup_column": "override"
             },
             format='json')
 
@@ -374,7 +376,8 @@ class TableApiMerge(TableApiBase):
                 "src_df": self.src_df,
                 "how": "inner",
                 "left_on": "sid",
-                "right_on": "sid"
+                "right_on": "sid",
+                "dup_column": "override"
             },
             format='json')
 
@@ -401,7 +404,8 @@ class TableApiMerge(TableApiBase):
                 "src_df": serializers.df_to_string(r_df),
                 "how": "inner",
                 "left_on": "sid",
-                "right_on": "sid"
+                "right_on": "sid",
+                "dup_column": "override"
             },
             format='json')
 
@@ -419,14 +423,6 @@ class TableApiMerge(TableApiBase):
         # Get the only workflow in the fixture
         workflow = Workflow.objects.all()[0]
 
-        age = workflow.columns.filter(name='age')[0]
-        age.is_key = False
-        age.save()
-
-        email = workflow.columns.filter(name='email')[0]
-        email.is_key = False
-        email.save()
-
         # Get the data through the API
         response = self.client.put(
             reverse('table:api_merge', kwargs={'pk': workflow.id}),
@@ -434,18 +430,20 @@ class TableApiMerge(TableApiBase):
                 "src_df": self.src_df,
                 "how": "outer",
                 "left_on": "sid",
-                "right_on": "sid"
+                "right_on": "sid",
+                "dup_column": "override"
             },
             format='json')
 
-        # No anomaly should be detected
-        self.assertEqual(None, response.data.get('detail', None))
+        # Anomaly detected
+        self.assertIn('New values in column', response.data['detail'])
+        self.assertIn('are not of type', response.data['detail'])
 
         # Get the new workflow
         workflow = Workflow.objects.all()[0]
 
         # Result should have three rows as the initial DF
-        self.assertEqual(workflow.nrows, 4)
+        self.assertEqual(workflow.nrows, 3)
 
         # Check for df/wf consistency
         self.assertTrue(pandas_db.check_wf_df(workflow))
@@ -453,14 +451,6 @@ class TableApiMerge(TableApiBase):
     def test_table_pandas_merge_to_outer(self):
         # Get the only workflow in the fixture
         workflow = Workflow.objects.all()[0]
-
-        age = workflow.columns.filter(name='age')[0]
-        age.is_key = False
-        age.save()
-
-        email = workflow.columns.filter(name='email')[0]
-        email.is_key = False
-        email.save()
 
         # Transform new table into string
         r_df = pd.DataFrame(self.src_df)
@@ -472,18 +462,20 @@ class TableApiMerge(TableApiBase):
                 "src_df": serializers.df_to_string(r_df),
                 "how": "outer",
                 "left_on": "sid",
-                "right_on": "sid"
+                "right_on": "sid",
+                "dup_column": "override"
             },
             format='json')
 
-        # No anomaly should be detected
-        self.assertEqual(None, response.data.get('detail', None))
+        # Anomaly detected
+        self.assertIn('New values in column', response.data['detail'])
+        self.assertIn('are not of type', response.data['detail'])
 
         # Get the new workflow
         workflow = Workflow.objects.all()[0]
 
         # Result should have three rows as the initial DF
-        self.assertEqual(workflow.nrows, 4)
+        self.assertEqual(workflow.nrows, 3)
 
         # Check for df/wf consistency
         self.assertTrue(pandas_db.check_wf_df(workflow))
@@ -493,14 +485,6 @@ class TableApiMerge(TableApiBase):
         # Get the only workflow in the fixture
         workflow = Workflow.objects.all()[0]
 
-        age = workflow.columns.filter(name='age')[0]
-        age.is_key = False
-        age.save()
-
-        email = workflow.columns.filter(name='email')[0]
-        email.is_key = False
-        email.save()
-
         # Get the data through the API
         response = self.client.put(
             reverse('table:api_merge', kwargs={'pk': workflow.id}),
@@ -508,7 +492,8 @@ class TableApiMerge(TableApiBase):
                 "src_df": self.src_df,
                 "how": "left",
                 "left_on": "sid",
-                "right_on": "sid"
+                "right_on": "sid",
+                "dup_column": "override"
             },
             format='json')
 
@@ -539,7 +524,8 @@ class TableApiMerge(TableApiBase):
                 "src_df": serializers.df_to_string(r_df),
                 "how": "left",
                 "left_on": "sid",
-                "right_on": "sid"
+                "right_on": "sid",
+                "dup_column": "override"
             },
             format='json')
 
@@ -560,14 +546,6 @@ class TableApiMerge(TableApiBase):
     def test_table_JSON_merge_to_outer_NaN(self):
         # Get the only workflow in the fixture
         workflow = Workflow.objects.all()[0]
-
-        age = workflow.columns.filter(name='age')[0]
-        age.is_key = False
-        age.save()
-
-        email = workflow.columns.filter(name='email')[0]
-        email.is_key = False
-        email.save()
 
         # Drop the column with booleans because the data type is lost
         workflow_delete_column(
@@ -592,7 +570,8 @@ class TableApiMerge(TableApiBase):
                 "src_df": self.src_df2,
                 "how": "outer",
                 "left_on": "sid",
-                "right_on": "sid"
+                "right_on": "sid",
+                "dup_column": "override"
             },
             format='json')
 
@@ -615,14 +594,6 @@ class TableApiMerge(TableApiBase):
     def test_table_pandas_merge_to_outer_NaN(self):
         # Get the only workflow in the fixture
         workflow = Workflow.objects.all()[0]
-
-        age = workflow.columns.filter(name='age')[0]
-        age.is_key = False
-        age.save()
-
-        email = workflow.columns.filter(name='email')[0]
-        email.is_key = False
-        email.save()
 
         # Drop the column with booleans because the data type is lost
         workflow_delete_column(
@@ -647,7 +618,8 @@ class TableApiMerge(TableApiBase):
                 "src_df": serializers.df_to_string(r_df),
                 "how": "outer",
                 "left_on": "sid",
-                "right_on": "sid"
+                "right_on": "sid",
+                "dup_column": "override"
             },
             format='json')
 
