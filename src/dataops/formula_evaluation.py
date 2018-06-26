@@ -5,7 +5,7 @@ import itertools
 
 from django.utils.dateparse import parse_datetime
 
-from ontask import OntaskException
+from ontask import OntaskException, fix_pctg_in_name
 
 
 def has_variable(formula, variable):
@@ -27,6 +27,21 @@ def has_variable(formula, variable):
     return formula['id'] == variable
 
 
+def get_variables(formula):
+    """
+    Return a list with the variable names in a formula
+    :param formula:
+    :return: list of strings (variable names)
+    """
+
+    if 'condition' in formula:
+        return list(itertools.chain.from_iterable(
+            [get_variables(x) for x in formula['rules']]
+        ))
+
+    return [formula['id']]
+
+
 def rename_variable(formula, old_name, new_name):
     """
     Function that traverses the formula and changes the appearance of one
@@ -37,6 +52,10 @@ def rename_variable(formula, old_name, new_name):
     :param new_name: New variable name
     :return: The new modified formula.
     """
+
+    # Trivial case of an empty formula
+    if not formula:
+        return formula
 
     if 'condition' in formula:
         # Recursive call
@@ -64,7 +83,7 @@ def evaluate_top_node(query_obj, given_vars):
     :return: True/False
     """
     # Pop the "valid" field. It should always be true anyway
-    query_obj.pop('valid')
+    # query_obj.pop('valid')
 
     return evaluate_node(query_obj, given_vars)
 
@@ -88,7 +107,7 @@ def evaluate_node(node, given_variables):
         else:
             result = any(sub_clauses)
 
-        if node.pop('not', False):
+        if node.get('not', False):
             result = not result
 
         return result
@@ -98,14 +117,17 @@ def evaluate_node(node, given_variables):
     # Get the variable value if running in boolean mode
     varvalue = None
     if given_variables is not None:
+        # If calculating a boolean result and no value in the dictionary, finish
+        if varname not in given_variables:
+            raise OntaskException(
+                'No value found for variable {0}'.format(varname),
+                varname
+            )
+
         varvalue = given_variables.get(varname, None)
 
     # Get the operator
     operator = node['operator']
-
-    # If calculating a boolean result and no value in the dictionary, finish
-    if varvalue is None:
-        raise OntaskException('No value found for variable', varname)
 
     # If the operator is between or not_between, there is a special case,
     # the constant cannot be computed because the node['value'] is a pair
@@ -133,28 +155,28 @@ def evaluate_node(node, given_variables):
         result = varvalue != constant
 
     elif operator == 'begins_with' and node['type'] == 'string':
-        result = varvalue.startswith(constant)
+        result = (varvalue is not None) and varvalue.startswith(constant)
 
     elif operator == 'not_begin_with' and node['type'] == 'string':
-        result = not varvalue.startswith(constant)
+        result = not ((varvalue is not None) and varvalue.startswith(constant))
 
     elif operator == 'contains' and node['type'] == 'string':
-        result = varvalue.find(constant) != -1
+        result = (varvalue is not None) and varvalue.find(constant) != -1
 
     elif operator == 'not_contains' and node['type'] == 'string':
-        result = varvalue.find(constant) == -1
+        result = (varvalue is None) or varvalue.find(constant) == -1
 
     elif operator == 'ends_with' and node['type'] == 'string':
-        result = varvalue.endswith(constant)
+        result = (varvalue is not None) and varvalue.endswith(constant)
 
     elif operator == 'not_ends_width' and node['type'] == 'string':
-        result = not varvalue.endswith(constant)
+        result = (varvalue is None) or (not varvalue.endswith(constant))
 
     elif operator == 'is_empty' and node['type'] == 'string':
-        result = varvalue == ''
+        result = varvalue == '' or varvalue == None
 
     elif operator == 'is_not_empty' and node['type'] == 'string':
-        result = varvalue != ''
+        result = (varvalue is not None) and varvalue != ''
 
     elif operator == 'less' and \
             (node['type'] == 'integer' or node['type'] == 'double'
@@ -199,33 +221,48 @@ def evaluate_node(node, given_variables):
 
 def evaluate_node_sql(node):
     """
-    Given a node representing a query, and a dictionary with (name, values),
-    translates the expression into a SQL query.
+    Given a node representing a query filter
+    translates the expression into a SQL filter expression.
     :param node: Node representing the expression
-    :return: String with the query and list of fields to replace
+    :return: String with the filter and list of fields to replace
+
+    WARNING:
+    select * from table where variable <> 'value'
+    does not return records where variable is different from value. It ignores
+    those that are NULL
+
+    Instead the query should be:
+
+    select * from table where (variable <> 'value') or (variable is null)
+
     """
     if 'condition' in node:
         # Node is a condition, get the values of the sub-clauses
         sub_pairs = \
             [evaluate_node_sql(x) for x in node['rules']]
 
+        if not sub_pairs:
+            # Nothing has been returned, so it is an empty query
+            return '', []
+
         # Now combine
         if node['condition'] == 'AND':
-            result = '(' + \
-                     ') AND ('.join([x for x, _ in sub_pairs]) + ')'
+            result = '((' + \
+                     ') AND ('.join([x for x, _ in sub_pairs]) + '))'
         else:
-            result = '(' + \
-                     ') OR ('.join([x for x, _ in sub_pairs]) + ')'
+            result = '((' + \
+                     ') OR ('.join([x for x, _ in sub_pairs]) + '))'
         result_fields = \
             list(itertools.chain.from_iterable([x for _, x in sub_pairs]))
 
-        if node.pop('not', False):
-            result = 'NOT (' + result + ')'
+        if node.get('not', False):
+            result = '(NOT (' + result + '))'
 
         return result, result_fields
 
-    # Get the variable name
-    varname = node['field']
+    # Get the variable name and duplicate the symbol % in case it is part of
+    # the variable name (escape needed for SQL processing)
+    varname = fix_pctg_in_name(node['field'])
 
     # Get the operator
     operator = node['operator']
@@ -251,42 +288,52 @@ def evaluate_node_sql(node):
     # Terminal Node
     result_fields = []
     if operator == 'equal':
-        result = '"{0}"'.format(varname) + ' = %s'
+        result = '("{0}"'.format(varname) + \
+                 ' = %s) AND ("{0}" is not null)'.format(varname)
         result_fields = [str(constant)]
 
     elif operator == 'not_equal':
-        result = '"{0}"'.format(varname) + '!= %s'
+        result = '("{0}"'.format(varname) + \
+                 '!= %s) OR ("{0}" is null)'.format(varname)
         result_fields = [str(constant)]
 
     elif operator == 'begins_with' and node['type'] == 'string':
-        result = '"{0}"'.format(varname) + ' LIKE %s'
+        result = '("{0}"'.format(varname) + \
+                 ' LIKE %s) AND ("{0}" is not null)'.format(varname)
         result_fields = [node['value'] + "%"]
 
-    elif operator == 'not_begin_with' and node['type'] == 'string':
-        result = '"{0}"'.format(varname) + ' NOT LIKE %s'
+    elif operator == 'not_begins_with' and node['type'] == 'string':
+        result = '("{0}"'.format(varname) + \
+                 ' NOT LIKE %s) OR ("{0}" is null)'.format(varname)
         result_fields = [node['value'] + "%"]
 
     elif operator == 'contains' and node['type'] == 'string':
-        result = '"{0}"'.format(varname) + ' LIKE %s'
+        result = '("{0}"'.format(varname) + \
+                 ' LIKE %s) AND ("{0}" is not null)'.format(varname)
         result_fields = ["%" + node['value'] + "%"]
 
     elif operator == 'not_contains' and node['type'] == 'string':
-        result = '"{0}"'.format(varname) + ' NOT LIKE %s'
+        result = '("{0}"'.format(varname) + \
+                 ' NOT LIKE %s) OR ("{0}" is null)'.format(varname)
         result_fields = ["%" + node['value'] + "%"]
 
     elif operator == 'ends_with' and node['type'] == 'string':
-        result = '"{0}"'.format(varname) + ' LIKE %s'
+        result = '("{0}"'.format(varname) + \
+                 ' LIKE %s) AND ("{0}" is not null)'.format(varname)
         result_fields = ["%" + node['value']]
 
     elif operator == 'not_ends_width' and node['type'] == 'string':
-        result = '"{0}"'.format(varname) + ' NOT LIKE %s'
+        result = '("{0}"'.format(varname) + \
+                 ' NOT LIKE %s) OR ("{0}" is null)'.format(varname)
         result_fields = ["%" + node['value']]
 
     elif operator == 'is_empty' and node['type'] == 'string':
-        result = '"{0}"'.format(varname) + " == ''"
+        result = '("{0}"'.format(varname) + \
+                 " = '') OR (\"{0}\" is null)".format(varname)
 
     elif operator == 'is_not_empty' and node['type'] == 'string':
-        result = '"{0}"'.format(varname) + " != ''"
+        result = '("{0}"'.format(varname) + \
+                 " != '') AND (\"{0}\" is not null)".format(varname)
 
     elif operator == 'less' and \
             (node['type'] == 'integer' or node['type'] == 'double'

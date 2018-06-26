@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
-from .base import *             # NOQA
-import sys
+
 import logging.config
+import sys
+
+from .base import *  # NOQA
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 TEMPLATES[0]['OPTIONS'].update({'debug': True})
 
+ALLOWED_HOSTS = ['*']
+
 # Define STATIC_ROOT for the collectstatic command
-STATIC_ROOT = join(BASE_DIR, '..', 'site', 'static')
+STATIC_ROOT = join(BASE_DIR(), '..', 'site', 'static')
 
 # Turn off debug while imported by Celery with a workaround
 # See http://stackoverflow.com/a/4806384
@@ -20,10 +24,20 @@ if "celery" in sys.argv[0]:
 INSTALLED_APPS += (
     'debug_toolbar',)
 
-DEBUG_TOOLBAR_CONFIG = {
-    'SHOW_TOOLBAR_CALLBACK': lambda r: False,  # disables it
-    # '...
-}
+TESTING = len(sys.argv) > 1 and sys.argv[1] == 'test'
+if not TESTING:
+    DEBUG_TOOLBAR_CONFIG = {
+        # 'SHOW_TOOLBAR_CALLBACK': lambda r: True,  # enables it
+        'SHOW_TOOLBAR_CALLBACK': lambda r: False,  # disables it
+        # '...
+    }
+
+if DEBUG:
+    print('BASE_DIR: ' + BASE_DIR())
+    print('STATICFILES_DIRS: ' + ', '.join(STATICFILES_DIRS))
+    print('MEDIA_ROOT: ' + MEDIA_ROOT)
+    print('MEDIA_URL: ' + MEDIA_URL)
+    print('ONTASK_HELP_URL: ' + ONTASK_HELP_URL)
 
 # Additional middleware introduced by debug toolbar
 MIDDLEWARE_CLASSES += (
@@ -39,10 +53,11 @@ THUMBNAIL_DEBUG = True
 INTERNAL_IPS = [
     '127.0.0.1',
     '0.0.0.1',
+    'localhost',
 ]
 
 # Log everything to the logs directory at the top
-LOGFILE_ROOT = join(dirname(BASE_DIR), 'logs')
+LOGFILE_ROOT = join(BASE_DIR(), '..', 'logs')
 
 # Reset logging
 # (see http://www.caktusgroup.com/blog/2015/01/27/Django-Logging-Configuration-logging_config-default-settings-logger/)
@@ -73,6 +88,18 @@ LOGGING = {
             'filename': join(LOGFILE_ROOT, 'project.log'),
             'formatter': 'verbose'
         },
+        'script_log_file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': join(LOGFILE_ROOT, 'script.log'),
+            'formatter': 'verbose'
+        },
+        'scheduler_log_file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': join(LOGFILE_ROOT, 'scheduler.log'),
+            'formatter': 'verbose'
+        },
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
@@ -87,6 +114,16 @@ LOGGING = {
         },
         'project': {
             'handlers': ['proj_log_file'],
+            'level': 'DEBUG',
+        },
+        'scripts': {
+            'handlers': ['script_log_file'],
+            'propagate': True,
+            'level': 'DEBUG',
+        },
+        'scripts.scheduler': {
+            'handlers': ['scheduler_log_file'],
+            'propagate': True,
             'level': 'DEBUG',
         },
     }

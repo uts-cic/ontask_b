@@ -1,25 +1,28 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
+
+import logging.config
+import os
 # In production set the environment variable like this:
 #    DJANGO_SETTINGS_MODULE=ontask.settings.production
 import socket
 
-from .base import *             # NOQA
-import logging.config
-
+from .base import *  # NOQA
 
 # For security and performance reasons, DEBUG is turned off
 DEBUG = False
 TEMPLATE_DEBUG = False
 
 # Must mention ALLOWED_HOSTS in production!
-# ALLOWED_HOSTS = ["ontask.com"]
 ALLOWED_HOSTS = [socket.getfqdn()]
 
 # Additional middleware introduced by debug toolbar
 MIDDLEWARE_CLASSES += (
    'django.middleware.security.SecurityMiddleware',)
 
+#
+# Security features
+#
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000
@@ -28,6 +31,11 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_SSL_REDIRECT = True
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
+
+#
+# Folder to scan for plugins
+#
+DATAOPS_PLUGIN_DIRECTORY = os.path.join(PROJECT_PATH, 'plugins')
 
 # Cache the templates in memory for speed-up
 loaders = [
@@ -41,10 +49,10 @@ TEMPLATES[0]['OPTIONS'].update({"loaders": loaders})
 TEMPLATES[0].update({"APP_DIRS": False})
 
 # Define STATIC_ROOT for the collectstatic command
-STATIC_ROOT = join(BASE_DIR, '..', 'site', 'static')
+STATIC_ROOT = join(BASE_DIR(), '..', 'site', 'static')
 
 # Log everything to the logs directory at the top
-LOGFILE_ROOT = join(dirname(BASE_DIR), 'logs')
+LOGFILE_ROOT = join(dirname(BASE_DIR()), 'logs')
 
 # Reset logging
 LOGGING_CONFIG = None
@@ -67,6 +75,18 @@ LOGGING = {
             'filename': join(LOGFILE_ROOT, 'project.log'),
             'formatter': 'verbose'
         },
+        'script_log_file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': join(LOGFILE_ROOT, 'script.log'),
+            'formatter': 'verbose'
+        },
+        'scheduler_log_file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': join(LOGFILE_ROOT, 'scheduler.log'),
+            'formatter': 'verbose'
+        },
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
@@ -78,10 +98,20 @@ LOGGING = {
             'handlers': ['proj_log_file'],
             'level': 'DEBUG',
         },
-    'django.request': {
-        'handlers': ['proj_log_file'],
-        'level': 'ERROR',
-        'propagate': True,
+        'django.request': {
+            'handlers': ['proj_log_file'],
+            'level': 'ERROR',
+            'propagate': True,
+        },
+        'scripts': {
+            'handlers': ['script_log_file'],
+            'propagate': True,
+            'level': 'DEBUG',
+        },
+        'scripts.scheduler': {
+            'handlers': ['scheduler_log_file'],
+            'propagate': True,
+            'level': 'DEBUG',
         },
     }
 }

@@ -8,11 +8,11 @@ from .models import Action, Condition
 
 class ActionAdmin(admin.ModelAdmin):
     list_display = ('id',
-                    'name',
                     'workflow',
+                    'name',
                     'description_text',
                     'created',
-                    'n_selected_rows',
+                    'modified',
                     'content',
                     'serve_enabled'
                     )
@@ -24,6 +24,7 @@ class ConditionAdmin(admin.ModelAdmin):
                     'action',
                     'description_text',
                     'formula',
+                    'n_rows_selected',
                     'is_filter')
 
 

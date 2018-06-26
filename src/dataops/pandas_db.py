@@ -3,16 +3,18 @@ from __future__ import unicode_literals, print_function
 
 import logging
 import os.path
+import subprocess
 from collections import OrderedDict
 from itertools import izip
-import subprocess
 
+import numpy as np
 import pandas as pd
 from django.conf import settings
 from django.db import connection
 from sqlalchemy import create_engine
 
 from dataops.formula_evaluation import evaluate_node_sql
+from ontask import fix_pctg_in_name
 
 SITE_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -25,7 +27,7 @@ query_count_rows = 'SELECT count(*) from "{0}"'
 
 logger = logging.getLogger(__name__)
 
-# Translation between pandas data type names, and those handled in ontask
+# Translation between pandas data type names, and those handled in OnTask
 pandas_datatype_names = {
     'object': 'string',
     'int64': 'integer',
@@ -34,25 +36,72 @@ pandas_datatype_names = {
     'datetime64[ns]': 'datetime'
 }
 
+# Translation between SQL data type names, and those handled in OnTask
+sql_datatype_names = {
+    'text': 'string',
+    'bigint': 'integer',
+    'double precision': 'double',
+    'boolean': 'boolean',
+    'timestamp without time zone': 'datetime'
+}
+
 # DB Engine to use with Pandas (required by to_sql, from_sql
 engine = None
 
 
-def create_db_engine():
+def create_db_connection(dialect, driver, username, password, host, dbname):
     """
     Function that creates the engine object to connect to the database. The
     object is required by the pandas functions to_sql and from_sql
 
+    :param dialect: Dialect for the engine (oracle, mysql, postgresql, etc)
+    :param driver: DBAPI driver (psycopg2, ...)
+    :param username: Username to connect with the database
+    :param password: Password to connect with the database
+    :param host: Host to connect with the database
+    :param dbname: database name
     :return: the engine
     """
+
     # DB engine
     database_url = \
-        'postgresql://{user}:{password}@localhost:5432/{database_name}'.format(
-            user=settings.DATABASES['default']['USER'],
-            password=settings.DATABASES['default']['PASSWORD'],
-            database_name=settings.DATABASES['default']['NAME'],
+        '{dialect}{driver}://{user}:{password}@{host}/{database_name}'.format(
+            dialect=dialect,
+            driver=driver,
+            user=username,
+            password=password,
+            host=host,
+            database_name=dbname,
         )
-    engine = create_engine(database_url, echo=False)
+    return create_engine(database_url, echo=False, paramstyle='format')
+
+
+def create_db_engine(dialect, driver, username, password, host, dbname):
+    """
+    Function that creates the engine object to connect to the database. The
+    object is required by the pandas functions to_sql and from_sql
+
+    :param dialect: Dialect for the engine (oracle, mysql, postgresql, etc)
+    :param driver: DBAPI driver (psycopg2, ...)
+    :param username: Username to connect with the database
+    :param password: Password to connect with the database
+    :param host: Host to connect with the database
+    :param dbname: database name
+    :return: the engine
+    """
+
+    # DB engine
+    database_url = \
+        '{dialect}{driver}://{user}:{password}@{host}/{database_name}'.format(
+            dialect=dialect,
+            driver=driver,
+            user=username,
+            password=password,
+            host=host,
+            database_name=dbname,
+        )
+    engine = create_db_connection(dialect, driver, username, password, host,
+                                  dbname)
 
     if settings.DEBUG:
         print('Creating engine with ', database_url)
@@ -103,11 +152,18 @@ def delete_all_tables():
 
     return
 
-def is_matrix_in_db(table_name):
+
+def is_table_in_db(table_name):
     cursor = connection.cursor()
-    table_list = \
-        connection.introspection.get_table_list(cursor)
-    return table_name in [x.name for x in table_list]
+    return next(
+        (True for x in connection.introspection.get_table_list(cursor)
+         if x.name == table_name),
+        False
+    )
+
+
+def is_wf_table_in_db(workflow):
+    return is_table_in_db(create_table_name(workflow.id))
 
 
 def create_table_name(pk):
@@ -139,6 +195,20 @@ def load_from_db(pk):
 
 def load_table(table_name):
     """
+    Load a data frame from the SQL DB.
+
+    FUTURE WORK:
+    Consider to store the dataframes in Redis to reduce load/store time.
+    The trick is to use a compressed format:
+
+    SET: redisConn.set("key", df.to_msgpack(compress='zlib'))
+    GET: pd.read_msgpack(redisConn.get("key"))
+
+    Need to agree on a sensible item name that does not collide with anything
+    else and a policy to detect a cached dataframe and remove it when the data
+    changes (difficult to detect? Perhaps df_new.equals(df_current))
+
+    If feasible, a write-through system could be easily implemented.
 
     :param table_name: Table name to read from the db in to data frame
     :return: data_frame or None if it does not exist.
@@ -149,7 +219,77 @@ def load_table(table_name):
     if settings.DEBUG:
         print('Loading table ', table_name)
 
-    return pd.read_sql(table_name, engine)
+    result = pd.read_sql(table_name, engine)
+
+    # After reading from the DB, turn all None into NaN
+    result.fillna(value=np.nan, inplace=True)
+    return result
+
+
+def load_df_from_csvfile(file, skiprows=0, skipfooter=0):
+    """
+    Given a file object, try to read the content as a CSV file and transform
+    into a data frame. The skiprows and skipfooter are number of lines to skip
+    from the top and bottom of the file (see read_csv in pandas).
+
+    It also tries to convert as many columns as possible to date/time format
+    (testing the conversion on every string column).
+
+    :param filename: File object to read the CSV content
+    :param skiprows: Number of lines to skip at the top of the document
+    :param skipfooter: Number of lines to skip at the bottom of the document
+    :return: Resulting data frame, or an Exception.
+    """
+    data_frame = pd.read_csv(
+        file,
+        index_col=False,
+        infer_datetime_format=True,
+        quotechar='"',
+        skiprows=skiprows,
+        skipfooter=skipfooter
+    )
+
+    # Strip white space from all string columns and try to convert to
+    # datetime just in case
+    for x in list(data_frame.columns):
+        if data_frame[x].dtype.name == 'object':
+            # Column is a string! Remove the leading and trailing white
+            # space
+            data_frame[x] = data_frame[x].str.strip().fillna(data_frame[x])
+
+            # Try the datetime conversion
+            try:
+                series = pd.to_datetime(data_frame[x],
+                                        infer_datetime_format=True)
+                # Datetime conversion worked! Update the data_frame
+                data_frame[x] = series
+            except (ValueError, TypeError):
+                pass
+    return data_frame
+
+
+def load_df_from_sqlconnection(conn_item, pwd=None):
+    """
+    Load a DF from a SQL connection open with the parameters given in conn_item.
+
+    :param conn_item: SQLConnection object with the connection parameters.
+    :return: Data frame or raise an exception.
+    """
+
+    # Get the connection
+    db_connection = create_db_connection(conn_item.conn_type,
+                                         conn_item.conn_driver,
+                                         conn_item.db_user,
+                                         pwd,
+                                         conn_item.db_host,
+                                         conn_item.db_name)
+
+    # Try to fetch the data
+    result = pd.read_sql(conn_item.db_table, db_connection)
+
+    # After reading from the DB, turn all None into NaN
+    result.fillna(value=np.nan, inplace=True)
+    return result
 
 
 def store_table(data_frame, table_name):
@@ -161,7 +301,10 @@ def store_table(data_frame, table_name):
     """
 
     # We ovewrite the content and do not create an index
-    data_frame.to_sql(table_name, engine, if_exists='replace', index=False)
+    data_frame.to_sql(table_name,
+                      engine,
+                      if_exists='replace',
+                      index=False)
 
     return
 
@@ -191,12 +334,32 @@ def delete_upload_table(pk):
     connection.commit()
 
 
-def df_column_types_rename(df):
-    result = [df[x].dtype.name for x in list(df.columns)]
-    for tname, ntname in pandas_datatype_names.items():
-        result[:] = [x if x != tname else ntname for x in result]
+def get_table_column_types(table_name):
+    """
+    :param table_name: Table name
+    :return: List of pairs (column name, SQL type)
+    """
+    cursor = connection.cursor()
+    cursor.execute("""select column_name, data_type from 
+    INFORMATION_SCHEMA.COLUMNS where table_name = '{0}'""".format(table_name))
 
-    return result
+    return cursor.fetchall()
+
+
+def df_column_types_rename(table_name):
+    """
+    
+    :param table_name: Primary key of the workflow containing this data frame (table) 
+    :return: List of data type strings translated to the proper values
+    """
+    column_types = get_table_column_types(table_name)
+
+    # result = [table_name[x].dtype.name for x in list(table_name.columns)]
+    # for tname, ntname in pandas_datatype_names.items():
+    #     result[:] = [x if x != tname else ntname for x in result]
+
+    return [sql_datatype_names[x] for _, x in
+            get_table_column_types(table_name)]
 
 
 def df_drop_column(pk, column_name):
@@ -215,7 +378,26 @@ def df_drop_column(pk, column_name):
     cursor.execute(query)
 
 
-def get_table_data(pk, cond_filter, column_names=None):
+def get_subframe(pk, cond_filter, column_names=None):
+    """
+    Execute a select query to extract a subset of the dataframe and turn the
+     resulting query set into a data frame.
+    :param pk: Workflow primary key
+    :param cond_filter: Condition object to filter the data (or None)
+    :param column_names: [list of column names], QuerySet with the data rows
+    :return:
+    """
+    # Get the cursor
+    cursor = get_table_cursor(pk, cond_filter, column_names)
+
+    # Create the DataFrame and set the column names
+    result = pd.DataFrame.from_records(cursor.fetchall(), coerce_float=True)
+    result.columns = [c.name for c in cursor.description]
+
+    return result
+
+
+def get_table_cursor(pk, cond_filter, column_names=None):
     """
     Execute a select query in the database with an optional filter obtained
     from the jquery QueryBuilder.
@@ -228,8 +410,9 @@ def get_table_data(pk, cond_filter, column_names=None):
 
     # Create the query
     if column_names:
+        safe_column_names = [fix_pctg_in_name(x) for x in column_names]
         query = 'SELECT "{0}" from "{1}"'.format(
-            '", "'.join(column_names),
+            '", "'.join(safe_column_names),
             create_table_name(pk)
         )
     else:
@@ -239,13 +422,22 @@ def get_table_data(pk, cond_filter, column_names=None):
     fields = []
     if cond_filter is not None:
         cond_filter, fields = evaluate_node_sql(cond_filter.formula)
-        query += ' WHERE ' + cond_filter
+        if cond_filter:
+            # The condition may be empty, in which case, nothing is needed.
+            query += ' WHERE ' + cond_filter
 
     # Execute the query
     cursor = connection.cursor()
     cursor.execute(query, fields)
 
-    # Get the data
+    return cursor
+
+
+def get_table_data(pk, cond_filter, column_names=None):
+    # Get first the cursor
+    cursor = get_table_cursor(pk, cond_filter, column_names)
+
+    # Return the data
     return cursor.fetchall()
 
 
@@ -258,12 +450,14 @@ def execute_select_on_table(pk, fields, values, column_names=None):
     :param fields: List of fields to add to the WHERE clause
     :param values: parameters to match the previous fields
     :param column_names: optional list of columns to select
-    :return: ([(list of column names,values)], QuerySet with the data rows)
+    :return: QuerySet with the data rows
     """
 
     # Create the query
     if column_names:
-        query = 'SELECT "{0}"'.format(','.join(column_names))
+        safe_column_names = ['"' + fix_pctg_in_name(x) + '"'
+                             for x in column_names]
+        query = 'SELECT {0}'.format(','.join(safe_column_names))
     else:
         query = 'SELECT *'
 
@@ -274,7 +468,8 @@ def execute_select_on_table(pk, fields, values, column_names=None):
     cursor = connection.cursor()
     if fields:
         query += ' WHERE ' + \
-                 ', '.join(['"{0}" = %s'.format(x) for x in fields])
+                 ' AND '.join(['"{0}" = %s'.format(fix_pctg_in_name(x))
+                               for x in fields])
         cursor.execute(query, values)
     else:
         # Execute the query
@@ -315,25 +510,26 @@ def query_to_dicts(query_string, *query_args):
 def update_row(pk, set_fields, set_values, where_fields, where_values):
     """
     Given a primary key, pairs (set_field, set_value), and pairs (where_field,
-    where_value), it updates the row in the matrix selected with the
+    where_value), it updates the row in the table selected with the
     list of (where field = where value) with the values in the assignments in
     the list of (set_fields, set_values)
 
     :param pk: Primary key to detect workflow
     :param set_fields: List of field names to be updated
     :param set_values: List of values to update the fields of the previous list
-    :param where_fields: List of fields used to filter the row in the matrix
+    :param where_fields: List of fields used to filter the row in the table
     :param where_values: List of values of the previous fields to filter the row
-    :return: The matrix in the workflow pointed by PK is modified.
+    :return: The table in the workflow pointed by PK is modified.
     """
 
     # First part of the query with the table name
     query = 'UPDATE "{0}"'.format(create_table_name(pk))
     # Add the SET field = value clauses
-    query += ' SET ' + ', '.join(['"{0}" = %s'.format(x) for x in set_fields])
+    query += ' SET ' + ', '.join(['"{0}" = %s'.format(fix_pctg_in_name(x))
+                                  for x in set_fields])
     # And finally add the WHERE clause
-    query += ' WHERE ' + ', '.join(['"{0}" = %s'.format(x)
-                                    for x in where_fields])
+    query += ' WHERE ' + ' AND '.join(['"{0}" = %s'.format(fix_pctg_in_name(x))
+                                       for x in where_fields])
 
     # Concatenate the values as parameters to the query
     parameters = set_values + where_values
@@ -348,7 +544,7 @@ def get_table_row_by_key(workflow, cond_filter, kv_pair, column_names=None):
     """
     Select the set of elements after filtering and with the key=value pair
 
-    :param workflow: workflow object to get to the matrix
+    :param workflow: workflow object to get to the table
     :param cond_filter: Condition object to filter the data (or None)
     :param kv_pair: A key=value pair to identify the row. Key is suppose to
            be unique.
@@ -359,7 +555,8 @@ def get_table_row_by_key(workflow, cond_filter, kv_pair, column_names=None):
 
     # Create the query
     if column_names:
-        query = 'SELECT "{0}"'.format('", "'.join(column_names))
+        safe_column_names = [fix_pctg_in_name(x) for x in column_names]
+        query = 'SELECT "{0}"'.format('", "'.join(safe_column_names))
     else:
         query = 'SELECT *'
 
@@ -367,7 +564,7 @@ def get_table_row_by_key(workflow, cond_filter, kv_pair, column_names=None):
     query += ' FROM "{0}"'.format(create_table_name(workflow.id))
 
     # Create the second part of the query setting key=value
-    query += ' WHERE ("{0}" = %s)'.format(kv_pair[0])
+    query += ' WHERE ("{0}" = %s)'.format(fix_pctg_in_name(kv_pair[0]))
     fields = [kv_pair[1]]
 
     # See if the action has a filter or not
@@ -395,63 +592,147 @@ def get_table_row_by_key(workflow, cond_filter, kv_pair, column_names=None):
     return OrderedDict(zip(workflow.get_column_names(), qs))
 
 
+def get_column_stats_from_df(df_column):
+    """
+    Given a data frame with a single column, return a set of statistics
+    depending on its type.
+
+    :param df_column: data frame with a single column
+    :return: A dictionary with keys depending on the type of column
+      {'min': minimum value (integer, double an datetime),
+       'q1': Q1 value (0.25) (integer, double),
+       'mean': mean value (integer, double),
+       'median': median value (integer, double),
+       'mean': mean value (integer, double),
+       'q3': Q3 value (0.75) (integer, double),
+       'max': maximum value (integer, double an datetime),
+       'std': standard deviation (integer, double),
+       'counts': (integer, double, string, datetime, Boolean',
+       'mode': (integer, double, string, datetime, Boolean,
+
+       or None if the column has all its values to NaN
+    """
+
+    if len(df_column.loc[df_column.notnull()]) == 0:
+        # The column has no data
+        return None
+
+    # Dictionary to return
+    result = {
+        'min': 0,
+        'q1': 0,
+        'mean': 0,
+        'median': 0,
+        'q3': 0,
+        'max': 0,
+        'std': 0,
+        'mode': None,
+        'counts': {},
+    }
+
+    data_type = pandas_datatype_names[df_column.dtype.name]
+
+    if data_type == 'integer' or data_type == 'double':
+        quantiles = df_column.quantile([0, .25, .5, .75, 1])
+        result['min'] = '{0:g}'.format(quantiles[0])
+        result['q1'] = '{0:g}'.format(quantiles[.25])
+        result['mean'] = '{0:g}'.format(df_column.mean())
+        result['median'] = '{0:g}'.format(quantiles[.5])
+        result['q3'] = '{0:g}'.format(quantiles[.75])
+        result['max'] = '{0:g}'.format(quantiles[1])
+        result['std'] = '{0:g}'.format(df_column.std())
+
+    result['counts'] = df_column.value_counts().to_dict()
+    mode = df_column.mode()
+    if len(mode) == 0:
+        mode = '--'
+    result['mode'] = mode[0]
+
+    return result
+
+
 def search_table_rows(workflow_id,
                       cv_tuples=None,
                       any_join=True,
-                      order_col=None,
+                      order_col_name=None,
                       order_asc=True,
-                      column_names=None):
+                      column_names=None,
+                      pre_filter=None):
     """
     Select rows where for every (column, value) pair, column contains value (
     as in LIKE %value%, these are combined with OR if any is TRUE, or AND if
     any is false, and the result is ordered by the given column and type (if
     given)
 
-    :param workflow_id: workflow object to get to the matrix
+    :param workflow_id: workflow object to get to the table
     :param cv_tuples: A column, value, type tuple to search the value in the
     column
     :param any_join: Boolean encoding if values should be combined with OR (or
     AND)
-    :param order_col: Order results by this column
-    :param order_asd: Order results in ascending values (or descending)
+    :param order_col_name: Order results by this column
+    :param order_asc: Order results in ascending values (or descending)
     :param column_names: Optional list of column names to select
+    :param pre_filter: Optional filter condition to pre filter the query set.
+           the query is built with these terms as requirement AND the cv_tuples.
     :return: The resulting query set
     """
 
     # Create the query
     if column_names:
-        query = 'SELECT "{0}"'.format('", "'.join(column_names))
+        safe_column_names = [fix_pctg_in_name(x) for x in column_names]
+        query = 'SELECT "{0}"'.format('", "'.join(safe_column_names))
     else:
         query = 'SELECT *'
 
     # Add the table
     query += ' FROM "{0}"'.format(create_table_name(workflow_id))
 
-    fields = []
-    likes = []
-    fields = []
+    # Calculate the first suffix to add to the query
+    filter_txt = ''
+    filter_fields = []
+    if pre_filter:
+        filter_txt, filter_fields = evaluate_node_sql(pre_filter)
+
     if cv_tuples:
+        likes = []
+        tuple_fields = []
         for name, value, data_type in cv_tuples:
-            if data_type == 'string':
-                mod_name = '("{0}" LIKE %s)'.format(name)
-            else:
-                mod_name = '(CAST("{0}" AS TEXT) LIKE %s)'.format(name)
+            # Make sure we escape the name and search as text
+            name = fix_pctg_in_name(name)
+            mod_name = '(CAST("{0}" AS TEXT) LIKE %s)'.format(name)
 
             # Create the second part of the query setting column LIKE '%value%'
             likes.append(mod_name)
-            fields.append('%' + value + '%')
-
-        query += ' WHERE '
+            tuple_fields.append('%' + value + '%')
 
         # Combine the search subqueries
         if any_join:
-            query += ' OR '.join(likes)
+            tuple_txt = '(' + ' OR '.join(likes) + ')'
         else:
-            query += ' AND '.join(likes)
+            tuple_txt = '(' + ' AND '.join(likes) + ')'
+
+    # Build the query so far appending the filter and/or the cv_tuples
+    if filter_txt or cv_tuples:
+        query += ' WHERE '
+
+    fields = []
+    # If there has been a suffix from the filter, add it.
+    if filter_txt and filter_fields:
+        query += filter_txt
+        fields.extend(filter_fields)
+
+    # If there is a pre-filter, the suffix needs to be "AND" with the ones
+    # just calculated
+    if filter_txt and cv_tuples:
+        query += ' AND '
+
+    if cv_tuples:
+        query += tuple_txt
+        fields.extend(tuple_fields)
 
     # Add the order if needed
-    if order_col:
-        query += ' ORDER BY "{0}"'.format(order_col)
+    if order_col_name:
+        query += ' ORDER BY "{0}"'.format(fix_pctg_in_name(order_col_name))
     if not order_asc:
         query += ' DESC'
 
@@ -465,20 +746,20 @@ def search_table_rows(workflow_id,
 
 def delete_table_row_by_key(workflow_id, kv_pair):
     """
-    Delete the row in the matrix attached to a workflow with the given key,
+    Delete the row in the table attached to a workflow with the given key,
     value pairs
 
-    :param workflow_id: workflow object to get to the matrix
+    :param workflow_id: workflow object to get to the table
     :param kv_pair: A key=value pair to identify the row. Key is suppose to
            be unique.
-    :return: Drops that row from the matrix in the DB
+    :return: Drops that row from the table in the DB
     """
 
     # Create the query
     query = 'DELETE FROM "{0}"'.format(create_table_name(workflow_id))
 
     # Create the second part of the query setting key=value
-    query += ' WHERE ("{0}" = %s)'.format(kv_pair[0])
+    query += ' WHERE ("{0}" = %s)'.format(fix_pctg_in_name(kv_pair[0]))
     fields = [kv_pair[1]]
 
     # Execute the query
@@ -551,8 +832,12 @@ def check_wf_df(workflow):
 
     # Identical data types
     for n1, n2 in zip(wf_cols, df_col_names):
-        if n1.data_type != pandas_datatype_names[df[n2].dtype.name]:
+        df_dt = pandas_datatype_names[df[n2].dtype.name]
+        if n1.data_type == 'boolean' and df_dt == 'string':
+            # This is the case of a column with Boolean and Nulls
+            continue
+
+        if n1.data_type != df_dt:
             return False
 
     return True
-

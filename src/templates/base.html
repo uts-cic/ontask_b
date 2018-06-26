@@ -3,28 +3,24 @@
   {% load settings %}
   {% load staticfiles %}
   {% load thumbnail %}
-
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="{% block description %}{% endblock description %}">
-    <meta name="author" content="Arun Ravindran">
     <link rel="shortcut icon" type="image/png" href="{% static 'site/ico/favicon.ico' %}" type="favicon/ico">
-
     <title>{% block title %}{% include "_brandname.html" %} :: {% endblock %}</title>
-
     <!-- Bootstrap core CSS -->
     <link href="https://netdna.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.css" rel="stylesheet">
-
     <!-- Custom styles for this site -->
     {% block styles %}
     <link href="{% static 'site/css/main.css' %}" rel="stylesheet">
     {% endblock styles %}
     <script type="text/javascript" src="{% static 'js/jquery.js' %}"></script>
+    <script type="text/javascript"
+            src="{% static 'site/js/bootstrap-session-timeout.min.js' %}"></script>
     <!-- Custom tags for the head tag -->
     {% block extrahead %}{% endblock extrahead %}
-
     <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
     <!--[if lt IE 9]>
       <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
@@ -32,6 +28,10 @@
     <![endif]-->
   </head>
   <body style="">
+    <div id="div-spinner">
+      <img id="img-spinner" src="{% static 'site/img/loading.gif' %}"
+           alt="Loading..."/>
+    </div>
     {% block navbar %}
     <div class="navbar navbar-default navbar-fixed-top" role="navigation">
       <div class="navbar-header">
@@ -41,14 +41,16 @@
           <span class="icon-bar"></span>
           <span class="icon-bar"></span>
         </button>
-        <a class="navbar-brand" href="{% url 'entry' %}">
+        <a class="navbar-brand" href="{% url 'home' %}">
           {% block navbar-brand %}
             <img src="{% static 'site/img/logo.png' %}" alt="logo">
-          {% comment %}
-            {% include "_brandname.html" %}
-          {% endcomment %}
           {% endblock %}
         </a>
+        {% if user.is_authenticated %}
+          <a class="navbar-brand" href="{% url 'entry' %}">
+            <span class="glyphicon glyphicon-home"></span>
+          </a>
+        {% endif %}
       </div>
       {% block navbar-menu %}
       <div class="collapse navbar-collapse">
@@ -56,24 +58,34 @@
           {% block navbar-left %}
             {% if request.session.ontask_workflow_id %}
               {% url 'workflow:detail' request.session.ontask_workflow_id as workflow_url %}
-              <li {% if request.path == workflow_url %}class="active"{% endif %}><a
+              <li {% if '/workflow/' in request.path %}class="active"{% endif %}><a
                   href="{{ workflow_url }}">Details</a></li>
-              {% url 'dataops:list' as dataops_url %}
-              <li {% if request.path == dataops_url %}class="active"{% endif %}><a
-                  href="{{ dataops_url }}">Dataops</a>
+
+              <li {% if '/dataops/' in request.path %}class="dropdown active"{% else %}class="dropdown"{% endif %}>
+                <a class="dropdown-toggle" data-toggle="dropdown">Dataops
+                  <span class="caret"></span></a>
+                <ul class="dropdown-menu">
+                  <li><a href="{% url 'dataops:uploadmerge' %}">Data Upload/Merge</a></li>
+                  <li><a href="{% url 'dataops:transform' %}">Transform</a></li>
+                </ul>
               </li>
 
-              {% url 'matrix:display' as matrix_display %}
-              <li {% if request.path == matrix_display %}class="active"{% endif %}><a
-                  href="{% url 'matrix:display' %}">Matrix</a>
+              {% url 'table:display' as table_display %}
+              <li {% if '/table/' in request.path %}class="active"{% endif %}><a
+                  href="{% url 'table:display' %}">Table</a>
               </li>
 
               {% url 'action:index' as actions_url %}
-              <li {% if request.path == actions_url %}class="active"{% endif %}><a
+              <li {% if '/action/' in request.path %}class="active"{% endif %}><a
                   href="{{ actions_url }}">Actions</a></li>
 
-              <li class="{% if not request.session.ontask_workflow_id %}disabled{% endif %}"><a
-                  href="{% url 'logs:show' %}">Logs</a>
+              {% url 'scheduler:index' as scheduler_url %}
+              <li {% if '/scheduler/' in request.path %}class="active"{% endif %}><a
+                  href="{{ scheduler_url }}">Scheduler</a></li>
+
+              {% url 'logs:show' as logs_url %}
+              <li {% if '/logs/' in request.path %}class="active"{% endif %}><a
+                  href="{{ logs_url }}">Logs</a>
               </li>
             {% else %}
               <li><a href="https://ontasklearning.org">About</a></li>
@@ -85,7 +97,7 @@
           {% block navbar-right %}
             <a href="{% static ONTASK_HELP_URL %}" class="btn btn-info"
                     data-toggle="tooltip"
-                    data-placement="bottom" title="Check the manual">
+                    data-placement="bottom" title="Read the manual">
               <span class="glyphicon glyphicon-book"></span></a>
             {% if user.is_authenticated %}
               {% if user.is_staff %}
@@ -107,6 +119,11 @@
       {% endblock %}
     </div>
     {% endblock navbar %}
+    {% if request.session.ontask_workflow_name %}
+      <div id="wflow-name" class="text-center alert alert-info">
+        {{ request.session.ontask_workflow_name }}
+      </div>
+    {% endif %}
     {% block messages %}
       {% if messages %}
         {% for message in messages %}
@@ -117,16 +134,8 @@
         {% endfor %}
       {% endif %}
     {% endblock %}
-
     {% block splash %}
     {% endblock splash %}
-    
-    {% if request.session.ontask_workflow_name %}
-    <div id="wflow-name" class="text-center alert alert-info">
-      {{ request.session.ontask_workflow_name }}
-    </div>
-    {% endif %}
-
     {% block container %}
     <div class="container">
       <div class="starter-template">
@@ -135,26 +144,66 @@
       </div>
     </div>
     {% endblock container %}
-
+    {% block timeout %}
+      <div class="modal fade" id="session-expire-warning-modal"
+           aria-hidden="true" data-keyboard="false" data-backdrop="static"
+           tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+        <div class="modal-dialog" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title">Your session is about to expire</h4>
+            </div>
+            <div class="modal-body">
+              Your session will expire in <span id="seconds-timer"></span>
+              seconds.
+            </div>
+            <div class="modal-footer">
+              <button type="button"
+                      class="btn btn-primary">
+                <span class="glyphicon glyphicon-ok"></span> Ok</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endblock timeout %}
     <!-- Site footer -->
     {% block footer %}
       <div class="container-fluid">
         <div class="footer">
-          <div class="row" id="base_footer">
-            <div class="col-lg-6 div1">
-                <p>&copy; OnTask Project {% now 'Y' %}</p>
+          <div class="row navbar-default navbar" id="base_footer"
+               style="margin-bottom: 0px">
+            <div class="col-lg-6 div1" style="margin-top:15px;">
+                <span style="color: #777;">
+                  &copy; OnTask Project {% now 'Y' %}</span>
             </div>
-            <div class="col-lg-6 div2 text-right">
-              Version: {% ontask_version %}
+            <div class="col-lg-6 div2 text-right" style="margin-top:15px;">
+              <span class="align-middle"
+                 style="color: #777;">Version: {% ontask_version %}</span>
             </div>
           </div>
         </div>
       </div>
     {% endblock %}
     <script src="https://netdna.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.js"></script>
-    <script src="{% static 'site/js/site.js' %}"></script>
+    <script src="{% static 'site/js/site.js' %}{% otv %}"></script>
     {% block scripts %}
     {% endblock scripts %}
+    {% if user.is_authenticated %}
+      <script  type="text/javascript">
+        $.sessionTimeout({
+          title: 'OnTask',
+          message: 'Your session is about to expire.',
+          logoutButton: 'Logout',
+          ignoreUserActivity: true,
+          keepAliveButton: 'Remain Connected',
+          keepAliveUrl: "{% url 'keep_alive' %}",
+          logoutUrl: "{% url 'accounts:logout' %}",
+          redirUrl: "{% url 'accounts:logout' %}",
+          warnAfter: ({{ ONTASK_TIMEOUT }} - 60) * 1000,
+          redirAfter: {{ ONTASK_TIMEOUT }} * 1000
+        });
+      </script>
+    {% endif %}
   </body>
 </html>
 

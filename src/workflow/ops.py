@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
 
-import cStringIO
 import gzip
+from datetime import datetime
+from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.models import Session
@@ -10,80 +11,26 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
+from rest_framework import serializers
 from rest_framework.parsers import JSONParser
 from rest_framework.renderers import JSONRenderer
 
+import logs.ops
 from action.models import Condition
-from dataops import formula_evaluation, pandas_db
+from dataops import pandas_db, ops
 from .models import Workflow, Column
-from .serializers import (WorkflowExportSerializer,
-                          WorkflowExportCompleteSerializer)
+from .serializers import (WorkflowExportSerializer, WorkflowImportSerializer)
 
 
-def lock_workflow(request, workflow):
-    """
-    Function that sets the session key in the workflow to flag that is locked.
-    :param request: HTTP request
-    :param workflow: workflow to lock
-    :return:
-    """
-    workflow.session_key = request.session.session_key
-    workflow.save()
-
-
-def unlock_workflow_by_id(wid):
-    """
-    Removes the session_key from the workflow
-    :param workflow:
-    :return:
-    """
-    try:
-        workflow = Workflow.objects.get(id=wid)
-    except ObjectDoesNotExist:
-        return
-
-    # Workflow exists, unlock
-    unlock_workflow(workflow)
-
-
-def unlock_workflow(workflow):
-    """
-    Removes the session_key from the workflow
-    :param workflow:
-    :return:
-    """
-    workflow.session_key = ''
-    workflow.save()
-
-
-def is_locked(workflow):
-    """
-    :param workflow: workflow object to check if it is locked
-    :return: Is the given workflow locked?
-    """
-
-    if not workflow.session_key:
-        # No key in the workflow, then it is not locked.
-        return False
-
-    try:
-        session = Session.objects.get(session_key=workflow.session_key)
-    except ObjectDoesNotExist:
-        # Session does not exist, then it is not locked
-        return False
-
-    # Session is in the workflow and in the session table. Locked if expire
-    # date is less that current time.
-    return session.expire_date < timezone.now()
-
-
-def get_workflow(request, wid=None):
+def get_workflow(request, wid=None, select_related=None, prefetch_related=None):
     """
     Function that gets the workflow that the user (in the current request) is
     using.
     :param request: HTTP request object
     :param wid: Workflow id to get. If not given, taken from the request
     session
+    :param select_related: Field to add as select_related query filter
+    :param prefetch_related: Field to add as prefetch_related query filter
     :return: Workflow object or None (if error)
     """
 
@@ -94,22 +41,34 @@ def get_workflow(request, wid=None):
         if not wid:
             wid = request.session['ontask_workflow_id']
 
+        # Initial query set with the distinct filter
         workflow = Workflow.objects.filter(
             Q(user=request.user) | Q(shared__id=request.user.id)
-        ).distinct().get(id=wid)
+        ).distinct()
+
+        # Apply select if given
+        if select_related:
+            workflow = workflow.select_related(select_related)
+
+        # Apply prefetch if given
+        if prefetch_related:
+            workflow = workflow.prefetch_related(prefetch_related)
+
+        # Final filter
+        workflow = workflow.get(id=wid)
     except (KeyError, ObjectDoesNotExist):
         # No workflow or value set in the session, flag error.
         return None
 
     # Step 2: If the workflow is locked by this user session, return correct
-    # result
+    # result (the session_key may be None if using the API)
     if request.session.session_key == workflow.session_key:
         return workflow
 
     # Step 3: If the workflow is unlocked, lock and return
     if not workflow.session_key:
         # Workflow is unlocked. Proceed to lock
-        lock_workflow(request, workflow)
+        workflow.lock(request, True)
         return workflow
 
     # Step 4: The workflow is locked. See if the session locking it is
@@ -120,7 +79,7 @@ def get_workflow(request, wid=None):
         # An exception means that the session stored as locking the
         # workflow is no longer in the session table, so the user can access
         # the workflow
-        lock_workflow(request, workflow)
+        workflow.lock(request, True)
         return workflow
 
     # Get the owner of the session locking the workflow
@@ -129,10 +88,10 @@ def get_workflow(request, wid=None):
     )
 
     # Step 5: The workflow is locked by a session that is valid. See if the
-    # session locking it happens to be from the same user (a previous session
-    # that has not been properly closed)
+    # session locking happens to be from the same user (a previous session
+    # that has not been properly closed, or an API call from the same user  )
     if owner == request.user:
-        lock_workflow(request, workflow)
+        workflow.lock(request)
         return workflow
 
     # Step 6: The workflow is locked by an existing session. See if the
@@ -144,20 +103,8 @@ def get_workflow(request, wid=None):
 
     # The workflow is locked by a session that has expired. Take the workflow
     # and lock it with the current session.
-    lock_workflow(request, workflow)
+    workflow.lock(request)
     return workflow
-
-
-def get_user_locked_workflow(workflow):
-    """
-    Given a workflow that is supposed to be locked, it returns the user that
-    is locking it.
-    :param workflow:
-    :return:
-    """
-    session = Session.objects.get(session_key=workflow.session_key)
-    session_data = session.get_decoded()
-    return get_user_model().objects.get(id=session_data.get('_auth_user_id'))
 
 
 def detach_dataframe(workflow):
@@ -187,7 +134,7 @@ def detach_dataframe(workflow):
     workflow.save()
 
 
-def do_import_workflow(user, name, file_item, include_data_cond):
+def do_import_workflow(user, name, file_item):
     """
     Receives a name and a file item (submitted through a form) and creates
     the structure of workflow, conditions, actions and data table.
@@ -195,61 +142,81 @@ def do_import_workflow(user, name, file_item, include_data_cond):
     :param user: User record to use for the import (own all created items)
     :param name: Workflow name (it has been checked that it does not exist)
     :param file_item: File item obtained through a form
-    :param include_data_cond: Boolean encoding if data and cond are loaded
     :return:
     """
 
-    data_in = gzip.GzipFile(fileobj=file_item)
-    data = JSONParser().parse(data_in)
-    if include_data_cond:
-        workflow_data = WorkflowExportCompleteSerializer(
-            data=data,
-            context={'user': user, 'name': name}
-        )
-    else:
-        workflow_data = WorkflowExportSerializer(
-            data=data,
-            context={'user': user, 'name': name}
-        )
+    try:
+        data_in = gzip.GzipFile(fileobj=file_item)
+        data = JSONParser().parse(data_in)
+    except IOError:
+        return 'Incorrect file. Expecting a GZIP file (exported workflow).'
+
+    # Serialize content
+    workflow_data = WorkflowImportSerializer(
+        data=data,
+        context={'user': user, 'name': name}
+    )
 
     # If anything went wrong, return the string to show to the form.
-    if not workflow_data.is_valid():
-        return workflow_data.errors
+    workflow = None
+    try:
+        if not workflow_data.is_valid():
+            return 'Unable to import the workflow' + ' (' + \
+                   workflow_data.errors + ')'
 
-    workflow_data.save(user=user, name=name)
+        # Save the new workflow
+        workflow = workflow_data.save(user=user, name=name)
+    except (TypeError, NotImplementedError) as e:
+        return 'Unable to import workflow (Exception: ' + e.message + ')'
+    except serializers.ValidationError as e:
+        return 'Unable to import workflow due to a validation error'
+    except Exception as e:
+        return 'Unable to import workflow (Exception: ' + e.message + ')'
+
+    if not pandas_db.check_wf_df(workflow):
+        # Something went wrong.
+        workflow.delete()
+        return 'Workflow data with incorrect structure.'
+
     # Success
+    # Log the event
+    logs.ops.put(user,
+                 'workflow_import',
+                 workflow,
+                 {'id': workflow.id,
+                  'name': workflow.name})
     return None
 
 
-def do_export_workflow(workflow, include_data_cond):
+def do_export_workflow(workflow, selected_actions=None):
     """
     Proceed with the workflow export.
-    :param workflow: Workflow record to export
-    :param include_data_cond: Boolean encoding if data and conditions should
-    be included.
+    :param workflow: Workflow record to export be included.
+    :param selected_actions: A subset of actions to export
     :return: Page that shows a confirmation message and starts the download
     """
-    # Get the info to send from the serializer
-    include_data = include_data_cond.lower() == 'true'
-    if include_data:
-        serializer = WorkflowExportCompleteSerializer(workflow)
-    else:
-        serializer = WorkflowExportSerializer(workflow)
 
+    # Create the context object for the serializer
+    context = {'selected_actions': selected_actions}
+
+    # Get the info to send from the serializer
+    serializer = WorkflowExportSerializer(workflow, context=context)
     to_send = JSONRenderer().render(serializer.data)
 
     # Get the in-memory file to compress
-    zbuf = cStringIO.StringIO()
+    zbuf = BytesIO()
     zfile = gzip.GzipFile(mode='wb', compresslevel=6, fileobj=zbuf)
     zfile.write(to_send)
     zfile.close()
 
+    suffix = datetime.now().strftime('%y%m%d_%H%M%S')
     # Attach the compressed value to the response and send
     compressed_content = zbuf.getvalue()
     response = HttpResponse(compressed_content)
-    response['Content-Encoding'] = 'application/gzip'
+    response['Content-Type'] = 'application/octet-stream'
+    response['Content-Transfer-Encoding'] = 'binary'
     response['Content-Disposition'] = \
-        'attachment; filename="ontask_workflow.gz"'
+        'attachment; filename="ontask_workflow_{0}.gz"'.format(suffix)
     response['Content-Length'] = str(len(compressed_content))
 
     return response
@@ -269,6 +236,9 @@ def workflow_delete_column(workflow, column, cond_to_delete=None):
     # Drop the column from the DB table storing the data frame
     pandas_db.df_drop_column(workflow.id, column.name)
 
+    # Reposition the columns above the one being deleted
+    workflow.reposition_columns(column.position, workflow.ncols + 1)
+
     # Delete the column
     column.delete()
 
@@ -279,20 +249,90 @@ def workflow_delete_column(workflow, column, cond_to_delete=None):
     if not cond_to_delete:
         # The conditions to delete are not given, so calculate them
         # Get the conditions/actions attached to this workflow
-        cond_to_delete = [x for x in Condition.objects.filter(
-            action__workflow=workflow)
-                          if formula_evaluation.has_variable(x.formula,
-                                                             column.name)]
+        cond_to_delete = [
+            x for x in Condition.objects.filter(action__workflow=workflow)
+            if column in x.columns.all()]
 
     # If a column disappears, the conditions that contain that variable
-    # are removed..
+    # are removed
+    actions_without_filters = []
     for condition in cond_to_delete:
-        # Formula has the name of the deleted column.
-        # Solution 1: Nuke (Very easy)
-        # Solution 2: Mark as invalid and enhance the edit condition form
-        #  to handle renaming the fields in a formula (Complex)
-        #
-        # Solution 1 chosen.
+        if condition.is_filter:
+            actions_without_filters.append(condition.action)
+            is_filter = True
+
+        # Formula has the name of the deleted column. Delete it
         condition.delete()
 
+    # Traverse the actions for which the filter has been deleted and reassess
+    #  all their conditions
+    for action in actions_without_filters:
+        action.update_n_rows_selected()
+
+    # If a column disappears, the views that contain only that column need to
+    # disappear as well as they are no longer relevant.
+    for view in workflow.views.all():
+        if view.columns.all().count() == 0:
+            view.delete()
+
     return
+
+
+def clone_column(column, new_workflow=None, new_name=None):
+    """
+    Function that given a column clones it and changes workflow and name
+    :param column: Object to clone
+    :param new_workflow: New workflow object to point
+    :param new_name: New name
+    :return: Cloned object
+    """
+    # Store the old object name before squashing it
+    old_name = column.name
+    old_position = column.position
+
+    # Clone
+    column.id = None
+
+    # Update some of the fields
+    if new_name:
+        column.name = new_name
+    if new_workflow:
+        column.workflow = new_workflow
+
+    # Set column at the end
+    column.position = column.workflow.ncols + 1
+    column.save()
+
+    # Update the number of columns in the workflow
+    column.workflow.ncols += 1
+    column.workflow.save()
+
+    # Reposition the columns above the one being deleted
+    column.workflow.reposition_columns(column.position, old_position + 1)
+
+    # Set the new column in the right location
+    column.position = old_position + 1
+    column.save()
+
+    # Add the column to the table and update it.
+    data_frame = pandas_db.load_from_db(column.workflow.id)
+    data_frame[new_name] = data_frame[old_name]
+    ops.store_dataframe_in_db(data_frame, column.workflow.id)
+
+    return column
+
+
+def reposition_column_and_update_df(workflow, column, to_idx):
+    """
+
+    :param workflow: Workflow object for which the repositioning is done
+    :param column: column object to relocate
+    :param to_idx: Destination index of the given column
+    :return: Content reflected in the DB
+    """
+
+    df = pandas_db.load_from_db(workflow.id)
+    workflow.reposition_columns(column.position, to_idx)
+    column.position = to_idx
+    column.save()
+    ops.store_dataframe_in_db(df, workflow.id)

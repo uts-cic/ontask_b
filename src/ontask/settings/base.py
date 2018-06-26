@@ -10,29 +10,50 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-import environ
-import os
-
-from django.core.urlresolvers import reverse_lazy
 from os.path import dirname, join, exists
-from django.contrib import messages
 
-# Build paths inside the project like this: join(BASE_DIR, "directory")
-BASE_DIR = dirname(dirname(dirname(__file__)))
-STATICFILES_DIRS = [join(BASE_DIR, 'static')]
-MEDIA_ROOT = join(BASE_DIR, 'media')
-MEDIA_URL = "/media/"
+import environ
+from django.contrib import messages
+from django.core.urlresolvers import reverse_lazy
+
+# import ldap
+# from django_auth_ldap.config import (
+#     LDAPSearch,
+#     GroupOfNamesType,
+#     LDAPGroupQuery
+# )
+
+# Use 12factor inspired environment variables or from a file and define defaults
+env = environ.Env(
+    DEBUG=False,
+    LTI_OAUTH_CREDENTIALS=(dict, {})
+)
+
+# Ideally move env file should be outside the git repo
+# i.e. BASE_DIR.parent.parent
+env_file = join(dirname(__file__), 'local.env')
+if exists(env_file):
+    environ.Env.read_env(str(env_file))
+
+# Read various variables from the environment
+BASE_URL = env('BASE_URL')
+DOMAIN_NAME = env('DOMAIN_NAME')
+
+# Build paths inside the project like this: join(BASE_DIR(), "directory")
+BASE_DIR = environ.Path(__file__) - 3
+STATICFILES_DIRS = [join(BASE_DIR(), 'static')]
+MEDIA_ROOT = join(BASE_DIR(), 'media')
+MEDIA_URL = BASE_URL + "/media/"
 ONTASK_HELP_URL = "html/index.html"
 
-# Project root folder
-PROJECT_PATH = os.path.abspath(os.path.dirname(__name__))
+# Project root folder (needed somewhere in Django
+PROJECT_PATH = BASE_DIR()
 
-# Use Django templates using the new Django 1.8 TEMPLATES settings
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-            join(BASE_DIR, 'templates'),
+            join(BASE_DIR(), 'templates'),
             # insert more TEMPLATE_DIRS here
         ],
         'APP_DIRS': True,
@@ -52,35 +73,21 @@ TEMPLATES = [
             ],
             'libraries': {
                 'settings': 'ontask.templatetags.settings',
+                'vis_include': 'visualizations.templatetags.vis_include',
             }
         },
     },
 ]
 
-# Use 12factor inspired environment variables or from a file
-env = environ.Env()
-
-# Ideally move env file should be outside the git repo
-# i.e. BASE_DIR.parent.parent
-env_file = join(dirname(__file__), 'local.env')
-if exists(env_file):
-    environ.Env.read_env(str(env_file))
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/dev/howto/deployment/checklist/
-
 # SECURITY WARNING: keep the secret key used in production secret!
 # Raises ImproperlyConfigured exception if SECRET_KEY not in os.environ
 SECRET_KEY = env('SECRET_KEY')
-
-ALLOWED_HOSTS = ['*']
 
 # Application definition
 
 INSTALLED_APPS = (
     'django_extensions',
     'django.contrib.auth',
-    'django_admin_bootstrapped',
     'django.contrib.admin',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -100,33 +107,89 @@ INSTALLED_APPS = (
     'rest_framework.authtoken',
     'django_summernote',
     'jquery',
+    'django_auth_lti',
+    'datetimewidget',
 
+    'accounts',
     'core.apps.CoreConfig',
     'profiles.apps.ProfileConfig',
-    'accounts',
     'workflow.apps.WorkflowConfig',
     'dataops.apps.DataopsConfig',
-    'matrix.apps.MatrixConfig',
+    'table.apps.TableConfig',
     'action.apps.ActionConfig',
-    'email_action.apps.EmailActionConfig',
     'logs.apps.LogsConfig',
-
+    'scheduler.apps.SchedulerConfig',
 )
 
 MIDDLEWARE_CLASSES = (
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django_auth_lti.middleware_patched.MultiLTILaunchAuthMiddleware',
     'django.contrib.auth.middleware.RemoteUserMiddleware',
     'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.cache.FetchFromCacheMiddleware',
+    'django.middleware.locale.LocaleMiddleware'
 )
 
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+    'django.contrib.auth.hashers.BCryptPasswordHasher',
+]
+
+#
+# LDAP AUTHENTICATION
+#
+# Variables taken from local.env
+# AUTH_LDAP_SERVER_URI = env('AUTH_LDAP_SERVER_URI')
+# AUTH_LDAP_BIND_PASSWORD = env('AUTH_LDAP_BIND_PASSWORD')
+
+# Additional configuration variables (read django-auth-ldap documentation)
+# AUTH_LDAP_CONNECTION_OPTIONS = {
+# }
+# AUTH_LDAP_BIND_DN = "cn=admin,dc=bogus,dc=com"
+# AUTH_LDAP_USER_SEARCH = LDAPSearch(
+#     "ou=people,dc=bogus,dc=com",
+#     ldap.SCOPE_SUBTREE,
+#     "(uid=%(user)s)")
+# AUTH_LDAP_USER_DN_TEMPLATE = "uid=%(user)s,ou=people,dc=bogus,dc=com"
+# AUTH_LDAP_START_TLS = True
+# AUTH_LDAP_GROUP_SEARCH = LDAPSearch("ou=groups,dc=example,dc=com",
+#     ldap.SCOPE_SUBTREE, "(objectClass=groupOfNames)"
+# )
+# AUTH_LDAP_GROUP_TYPE = GroupOfNamesType()
+# AUTH_LDAP_REQUIRE_GROUP = "cn=enabled,ou=groups,dc=example,dc=com"
+# AUTH_LDAP_DENY_GROUP = "cn=disabled,ou=groups,dc=example,dc=com"
+# AUTH_LDAP_USER_ATTR_MAP = {"first_name": "givenName", "last_name": "sn"}
+# AUTH_LDAP_USER_FLAGS_BY_GROUP = {
+#     "is_active": "cn=active,ou=groups,dc=example,dc=com",
+#     "is_staff": (
+#         LDAPGroupQuery("cn=staff,ou=groups,dc=example,dc=com") |
+#         LDAPGroupQuery("cn=admin,ou=groups,dc=example,dc=com")
+#     ),
+#     "is_superuser": "cn=superuser,ou=groups,dc=example,dc=com"
+# }
+# AUTH_LDAP_ALWAYS_UPDATE_USER = True
+# AUTH_LDAP_FIND_GROUP_PERMS = True
+# AUTH_LDAP_CACHE_GROUPS = True
+# AUTH_LDAP_GROUP_CACHE_TIMEOUT = 300
+
+
+#
+# LTI Authentication
+#
+LTI_OAUTH_CREDENTIALS = env('LTI_OAUTH_CREDENTIALS')
+
 AUTHENTICATION_BACKENDS = [
+    'django_auth_lti.backends.LTIAuthBackend',
     'django.contrib.auth.backends.RemoteUserBackend',
+    # 'django_auth_ldap.backend.LDAPBackend',
     'django.contrib.auth.backends.ModelBackend'
 ]
 
@@ -136,11 +199,12 @@ CACHES = {
         "LOCATION": "redis://127.0.0.1:6379/1",
         "TIMEOUT": 1800,
         "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient"
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "KEY_PREFIX": "ontask"
         },
-        "KEY_PREFIX": "ontask"
     }
 }
+
 # Cache time to live is 15 minutes
 CACHE_TTL = 60 * 30
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
@@ -173,16 +237,6 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 100
 }
 
-# PANDAS_RENDERERS = [
-#     "rest_pandas.renderers.PandasJSONRenderer",
-#     "rest_pandas.renderers.PandasCSVRenderer",
-#     "rest_pandas.renderers.PandasTextRenderer",
-#     "rest_pandas.renderers.PandasExcelRenderer",
-#     "rest_pandas.renderers.PandasOldExcelRenderer",
-#     "rest_pandas.renderers.PandasPNGRenderer",
-#     "rest_pandas.renderers.PandasSVGRenderer",
-# ]
-
 ROOT_URLCONF = 'ontask.urls'
 
 WSGI_APPLICATION = 'ontask.wsgi.application'
@@ -211,8 +265,7 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/dev/howto/static-files/
-
-STATIC_URL = '/static/'
+STATIC_URL = BASE_URL + '/static/'
 
 # Crispy Form Theme - Bootstrap 3
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
@@ -233,117 +286,6 @@ IMPORT_EXPORT_USE_TRANSACTIONS = True
 
 SITE_ID = 1
 
-# SUMMERNOTE_CONFIG = {
-#     # Using SummernoteWidget - iframe mode
-#     'iframe': False,  # or set False to use SummernoteInplaceWidget - no iframe
-#     # mode
-#
-#     # Using Summernote Air-mode
-#     'airMode': False,
-#
-#     # Use native HTML tags (`<b>`, `<i>`, ...) instead of style attributes
-#     # (Firefox, Chrome only)
-#     'styleWithTags': True,
-#
-#     # Set text direction : 'left to right' is default.
-#     'direction': 'ltr',
-#
-#     # Change editor size
-#     # 'width': '100%',
-#     # 'height': '480',
-#
-#     # Use proper language setting automatically (default)
-#     'lang': None,
-#
-#     # Customize toolbar buttons
-#     # 'toolbar': [
-#     #     ['style', ['style']],
-#     #     ['style', ['bold', 'italic', 'underline', 'clear']],
-#     #     ['para', ['ul', 'ol', 'height']],
-#     #     ['insert', ['link']],
-#     # ],
-#
-#     # Need authentication while uploading attachments.
-#     'attachment_require_authentication': True,
-#
-#     # Set `upload_to` function for attachments.
-#     # 'attachment_upload_to': my_custom_upload_to_func(),
-#
-#     # Set custom storage class for attachments.
-#     # attachment_storage_class': 'my.custom.storage.class.name',
-#
-#     # Set custom model for attachments (default: 'django_summernote.Attachment')
-#     # 'attachment_model': 'my.custom.attachment.model', # must inherit
-#                                 # 'django_summernote.AbstractAttachment'
-#
-#     # Set common css/js media files
-#     # 'base_css': (
-#     #     '//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css',
-#     # ),
-#     # 'base_js': (
-#     #     '//code.jquery.com/jquery-1.9.1.min.js',
-#     #     '//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js',
-#     # ),
-#     'default_css': (
-#         os.path.join(STATIC_URL, 'django_summernote/summernote.css'),
-#         os.path.join(STATIC_URL, 'django_summernote/django_summernote.css'),
-#     ),
-#     'default_js': (
-#         os.path.join(STATIC_URL,
-#                      'django_summernote/jquery.ui.widget.js'),
-#         os.path.join(STATIC_URL,
-#                      'django_summernote/jquery.iframe-transport.js'),
-#         os.path.join(STATIC_URL,
-#                      'django_summernote/jquery.fileupload.js'),
-#         os.path.join(STATIC_URL,
-#                      'django_summernote/summernote.min.js'),
-#     ),
-#
-#     # You can also add custom css/js for SummernoteInplaceWidget.
-#     # !!! Be sure to put {{ form.media }} in template before initiate
-#     # summernote.
-#     'css_for_inplace': (
-#     ),
-#     'js_for_inplace': (
-#     ),
-#
-#     # You can disable file upload feature.
-#     'disable_upload': False,
-#
-#     # Codemirror as codeview
-#     # If any codemirror settings are defined, it will include codemirror files
-#     # automatically.
-#     'css': {
-#         '//cdnjs.cloudflare.com/ajax/libs/codemirror/5.29.0/theme/monokai.min.css',
-#     },
-#     'codemirror': {
-#         'mode': 'htmlmixed',
-#         'lineNumbers': 'true',
-#
-#         # You have to include theme file in 'css' or 'css_for_inplace' before
-#         # using it.
-#         'theme': 'monokai',
-#     },
-#
-#     # Lazy initialize
-#     # If you want to initialize summernote at the bottom of page, set this as
-#     # True and call `initSummernote()` on your page.
-#     'lazy': True,
-#
-#     # To use external plugins,
-#     # Include them within `css` and `js`.
-#     # 'js': {
-#     #     '/some_static_folder/summernote-ext-print.js',
-#     #     '//somewhere_in_internet/summernote-plugin-name.js',
-#     # },
-#     # # You can also add custom settings in `summernote` section.
-#     # 'summernote': {
-#     #     'print': {
-#     #         'stylesheetUrl': '/some_static_folder/printable.css',
-#     #     },
-#     # }
-# }
-
 SUMMERNOTE_CONFIG = {
     'width': '100%',
     'height': '400px',
@@ -356,45 +298,50 @@ SUMMERNOTE_CONFIG = {
     'codemirror': {
         'theme': 'base16-dark',
         'mode': 'htmlmixed',
-        'lineNumbers': 'true',
-        'lineWrapping': 'true',
+        'lineNumbers': True,
+        'lineWrapping': True,
     },
     'lazy': True,
+    'disableDragAndDrop': True,
 }
 
 # Extra configuration options
-DATAOPS_CONTENT_TYPES = '["text/csv", "application/json", "application/gzip", "application/x-gzip"]'
+DATAOPS_CONTENT_TYPES = '["text/csv", "application/json", "application/gzip", "application/x-gzip", "application/vnd.ms-excel"]'
 DATAOPS_MAX_UPLOAD_SIZE = 209715200  # 200 MB
 
-# Email configuration
-EMAIL_ACTION_EMAIL_HOST = ''
-EMAIL_ACTION_EMAIL_PORT = ''
-EMAIL_ACTION_EMAIL_HOST_USER = ''
-EMAIL_ACTION_EMAIL_HOST_PASSWORD = ''
-EMAIL_ACTION_EMAIL_USE_TLS = ''
-EMAIL_ACTION_EMAIL_USE_SSL = ''
+# Raise because default of 1000 is too short
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
+
+# Email sever configuration
+EMAIL_HOST = ''
+EMAIL_PORT = ''
+EMAIL_HOST_USER = ''
+EMAIL_HOST_PASSWORD = ''
+EMAIL_USE_TLS = ''
+EMAIL_USE_SSL = ''
+
+# Additional email related variables
 EMAIL_ACTION_NOTIFICATION_TEMPLATE = """
 <html>
 <head/>
 <body>
 <p>Dear {{ user.name }}</p>
 
-<p>This message is to inform you that on {{ email_sent_datetime }} a total of 
-{{ num_messages }} emails were sent after the user {{ user.email }} executed 
-the action with name  "{{ action.name }}".</p> 
+<p>This message is to inform you that on {{ email_sent_datetime }}  
+{{ num_messages }} email{% if num_messages > 1 %}s{% endif %} were sent 
+resulting from the execution of the action with name "{{ action.name }}".</p> 
 
 {% if filter_present %}
 <p>The action had a filter that reduced the number of messages from 
 {{ num_rows }} to {{ num_selected }}.</p> 
 {% else %}
-<p>All the data rows stored in the workflow were used.</p>
+<p>All the data rows stored in the workflow table were used.</p>
 {% endif %}
 
 Regards.
 The OnTask Support Team
-</body>
-</html>
-"""
+</body></html>"""
+
 EMAIL_ACTION_NOTIFICATION_SUBJECT = "OnTask: Action executed"
 EMAIL_ACTION_NOTIFICATION_SENDER = 'ontask@ontasklearning.org'
 EMAIL_ACTION_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGP6zwAAAgcBApocMXEAAAAASUVORK5CYII='
@@ -402,3 +349,5 @@ EMAIL_ACTION_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nG
 LOGS_MAX_LIST_SIZE = 200
 
 SHORT_DATETIME_FORMAT = 'r'
+
+SCHEDULER_MINUTE_STEP = 15

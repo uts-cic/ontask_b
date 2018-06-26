@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
 
-from contextlib import contextmanager
-
 import pandas as pd
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -14,7 +12,6 @@ from rest_framework.test import APITransactionTestCase
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.expected_conditions import staleness_of
 from selenium.webdriver.support.ui import WebDriverWait
 
 from dataops import pandas_db
@@ -101,7 +98,7 @@ class OntaskApiTestCase(APITransactionTestCase):
         self.assertEqual(set(jattr.items()),
                          set(dattr.items()))
 
-    def compare_matrices(self, m1, m2):
+    def compare_tables(self, m1, m2):
         """
         Compares two pandas data frames
         :param m1: Pandas data frame
@@ -140,7 +137,8 @@ class OntaskLiveTestCase(LiveServerTestCase):
         fp = webdriver.FirefoxProfile()
         fp.set_preference("dom.file.createInChild", True)
         cls.selenium = webdriver.Firefox(firefox_profile=fp)
-        # cls.selenium.implicitly_wait(10)
+        cls.selenium.set_window_size(2880, 1800)
+        # cls.selenium.implicitly_wait(30)
 
     @classmethod
     def tearDownClass(cls):
@@ -164,13 +162,21 @@ class OntaskLiveTestCase(LiveServerTestCase):
     def logout(self):
         self.open(reverse('accounts:logout'))
 
-    @contextmanager
-    def wait_for_page_load(self, timeout=30):
-        # Hack taken from
-        # http://www.obeythetestinggoat.com/
-        # how-to-get-selenium-to-wait-for-page-load-after-a-click.html
-        old_page = self.selenium.find_element_by_tag_name('html')
-        yield
-        WebDriverWait(self.selenium, timeout).until(
-            staleness_of(old_page)
+    def wait_close_modal_refresh_table(self, table_id):
+        """
+        Function used  to wait for a modal window to close and for a table
+        with certain ID to appear again as a consequence of the browser's
+        response.
+        :param table_id: Id of the table being refreshed
+        :return:
+        """
+        # Close modal (wail until the modal-open element disappears)
+        WebDriverWait(self.selenium, 10).until_not(
+            EC.presence_of_element_located(
+                (By.CLASS_NAME, 'modal-open')
+            )
+        )
+        # Wait for the table to be refreshed
+        WebDriverWait(self.selenium, 10).until(
+            EC.presence_of_element_located((By.ID, table_id))
         )

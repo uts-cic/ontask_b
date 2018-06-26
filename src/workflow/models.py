@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
 
+import datetime
 import json
 
+import pytz
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.postgres.fields import JSONField
+from django.contrib.sessions.models import Session
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
+from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from dataops import pandas_db
@@ -13,7 +19,7 @@ from dataops import pandas_db
 
 class Workflow(models.Model):
     """
-    Model for a workflow, that is, a matrix, set of column descriptions and
+    Model for a workflow, that is, a table, set of column descriptions and
     all the information regarding the actions, conditions and such. This is
     the main object in the relational model.
     """
@@ -51,6 +57,7 @@ class Workflow(models.Model):
     attributes = JSONField(default=dict,
                            blank=True,
                            null=True)
+
     query_builder_ops = JSONField(default=dict,
                                   blank=True,
                                   null=True)
@@ -72,6 +79,21 @@ class Workflow(models.Model):
     # users, and many users can have this workflow as available to them.
     shared = models.ManyToManyField(settings.AUTH_USER_MODEL,
                                     related_name='shared_workflows')
+
+    @staticmethod
+    def unlock_workflow_by_id(wid):
+        """
+        Removes the session_key from the workflow with given id
+        :param wid: Workflow id
+        :return:
+        """
+        try:
+            workflow = Workflow.objects.get(id=wid)
+        except ObjectDoesNotExist:
+            return
+
+        # Workflow exists, unlock
+        workflow.unlock()
 
     def get_columns(self):
         """
@@ -171,7 +193,164 @@ class Workflow(models.Model):
 
         return None
 
+    def is_locked(self):
+        """
+        :return: Is the given workflow locked?
+        """
+
+        if not self.session_key:
+            # No key in the workflow, then it is not locked.
+            return False
+
+        try:
+            session = Session.objects.get(session_key=self.session_key)
+        except ObjectDoesNotExist:
+            # Session does not exist, then it is not locked
+            return False
+
+        # Session is in the workflow and in the session table. Locked if expire
+        # date is beyond the current time.
+        return session.expire_date >= timezone.now()
+
+    def lock(self, request, create_new_session=False):
+        """
+        Function that sets the session key in the workflow to flag that is locked.
+        :param request: HTTP request
+        :param create_new_session: Boolean to flag if a new session has to be
+               created.
+        :return: The session_key is assigned and saved.
+        """
+        if request.session.session_key is not None:
+            # Trivial case, the request has a legit session, so use it for
+            # the lock.
+            self.session_key = request.session.session_key
+            self.save()
+
+        # The request has a temporary session (non persistent). This is the
+        # case when the API is invoked. There are four possible case:
+        #
+        # Case 1: The workflow has empty lock information: CREATE SESSION and
+        #  UPDATE
+        #
+        # Case 2: The workflow has a session, but is not in the DB: CREATE
+        # SESSION and UPDATE
+        #
+        # Case 3: The workflow has a session but it has expired: UPDATE THE
+        # EXPIRE DATE OF THE SESSION
+        #
+        # Case 4: The workflow has a perfectly valid session: UPDATE THE
+        # EXPIRE DATE OF THE SESSION
+        #
+        print('AAA API INVOKED')
+
+        if create_new_session:
+            # Cases 1 and 2. Create a session and store the user_id
+            request.session.save()
+            request.session['_auth_user_id'] = request.user.id
+            request.session.save()
+            self.session_key = request.session.session_key
+            self.save()
+            return
+
+        # Cases 3 and 4. Update the existing session
+        session = Session.objects.get(pk=self.session_key)
+        session.expire_date = \
+            timezone.now() + \
+            datetime.timedelta(seconds=settings.SESSION_COOKIE_AGE)
+        session.save()
+
+    def unlock(self):
+        """
+        Removes the session_key from the workflow
+        :return: Nothing
+        """
+        self.session_key = ''
+        self.save()
+
+    def get_user_locking_workflow(self):
+        """
+        Given a workflow that is supposed to be locked, it returns the user that
+        is locking it.
+        :param workflow:
+        :return:
+        """
+        session = Session.objects.get(session_key=self.session_key)
+        session_data = session.get_decoded()
+        return get_user_model().objects.get(
+            id=session_data.get('_auth_user_id'))
+
+    def flush(self):
+        """
+        Flush all the data from the workflow and propagate changes throughout the
+        relations with columns, conditions, filters, etc. These steps require:
+
+        1) Delete the data frame from the database
+
+        2) Delete all the columns attached to the workflow
+
+        3) Delete all the conditions attached to the actions
+
+        4) Delete all the views attached to the workflow
+
+        :return: Reflected in the DB
+        """
+
+        # Step 1: Delete the data frame from the database
+        pandas_db.delete_table(self.id)
+
+        # Reset some of the workflow fields
+        self.nrows = 0
+        self.ncols = 0
+        self.n_filterd_rows = -1
+        self.set_query_builder_ops()
+        self.data_frame_table_name = ''
+
+        # Step 2: Delete the column_names, column_types and column_unique
+        self.columns.all().delete()
+
+        # Step 3: Delete the conditions attached to all the actions attached to the
+        # workflow.
+        self.actions.conditions.all().delete()
+
+        # Step 4: Delete all the views attached to the workflow
+        self.views.all().delete()
+
+        # Save the workflow with the new fields.
+        self.save()
+
+    def reposition_columns(self, from_idx, to_idx):
+        """
+
+        :param from_idx: Position from which the column is repositioned.
+        :param to_idx: New position for the column
+        :return: Appropriate column positions are modified
+        """
+
+        # If the indeces are identical, nothing needs to be moved.
+        if from_idx == to_idx:
+            return
+
+        # if from_idx == -1:
+        #    from_idx = Column.objects.filter(workflow=workflow).count() + 1
+
+        if from_idx < to_idx:
+            cols = self.columns.filter(position__gt=from_idx,
+                                       position__lte=to_idx)
+            step = -1
+        else:
+            cols = self.columns.filter(position__gte=to_idx,
+                                       position__lt=from_idx)
+            step = 1
+
+        # Update the positions of the appropriate columns
+        for col in cols:
+            col.position = col.position + step
+            col.save()
+
     def __str__(self):
+        return self.name
+
+    def __unicode__(self):
         return self.name
 
     class Meta:
@@ -180,6 +359,18 @@ class Workflow(models.Model):
 
 class Column(models.Model):
     """
+    Column object. contains information that should be at all times
+    consistent with the structure of the data frame stored in the database.
+
+    The column must point to the workflow.
+
+    Some columns are identified as "key" if they have unique values for all
+    table rows (pandas takes care of this with one line of code)
+
+    The data type is computed by Pandas upon reading the data.
+
+    The categories field is to provide a finite set of values as a JSON list
+
     """
 
     # Column name
@@ -215,18 +406,48 @@ class Column(models.Model):
                                  null=False,
                                  blank=False)
 
+    # Position of the column in the workflow table
+    position = models.IntegerField(
+        verbose_name='Column position (zero to insert last)',
+        default=0,
+        name='position',
+        null=False,
+        blank=False
+    )
+
+    # Boolean stating if the column is included in the visualizations
+    in_viz = models.BooleanField(default=True,
+                                 verbose_name='Include in visualization',
+                                 null=False,
+                                 blank=False)
+
     # Storing a JSON element with a list of categorical values to use for
     #  this column [val, val, val]
     categories = JSONField(
         default=list,
         blank=True,
         null=True,
-        verbose_name='Comma separated list of allowed values')
+        verbose_name='Comma separated list of values allowed in this column')
+
+    # Validity window
+    active_from = models.DateTimeField(
+        'Column active from',
+        blank=True,
+        null=True,
+        default=None,
+    )
+
+    active_to = models.DateTimeField(
+        'Column active until',
+        blank=True,
+        null=True,
+        default=None
+    )
 
     def get_categories(self):
         """
-
-        :return:
+        Return the categories and parse datetime if needed.
+        :return: List of values
         """
         if self.data_type == 'datetime':
             return [parse_datetime(x) for x in self.categories]
@@ -276,7 +497,12 @@ class Column(models.Model):
         if data_type == 'string':
             newval = str(value)
         elif data_type == 'integer':
-            newval = int(value)
+            # In this case, although the column has been declared as an
+            # integer, it could mutate to a float, so we allow this value.
+            try:
+                newval = int(value)
+            except ValueError:
+                newval = float(value)
         elif data_type == 'double':
             newval = float(value)
         elif data_type == 'boolean':
@@ -301,9 +527,23 @@ class Column(models.Model):
 
         return [Column.validate_column_value(data_type, x) for x in values]
 
+    @property
+    def is_active(self):
+        """
+        Function to ask if a column is active: the current time is within the
+        interval defined by active_from - active_to.
+        :return: Boolean encoding the active status
+        """
+        now = datetime.datetime.now(pytz.timezone(settings.TIME_ZONE))
+        return not ((self.active_from and now < self.active_from) or
+                    (self.active_to and self.active_to < now))
+
     def __str__(self):
+        return self.name
+
+    def __unicode__(self):
         return self.name
 
     class Meta:
         unique_together = ('name', 'workflow')
-        ordering = ('-is_key', 'name')
+        ordering = ('position',)

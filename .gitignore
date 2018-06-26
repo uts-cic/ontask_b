@@ -73,3 +73,23 @@ Desktop.ini
 
 mynotes.txt
 .git_OLD
+
+/src/media/django-summernote/
+
+/My_material
+
+/test_data/
+
+# Documentation
+/html
+/doctrees
+
+# Sublime annotations
+*.sublime-project
+*.sublime-workspace
+
+initial_workflow
+
+venvs
+
+docs

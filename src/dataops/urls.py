@@ -4,46 +4,64 @@ from __future__ import unicode_literals, print_function
 from django.conf.urls import url
 
 import dataops.upload
-from . import views, row_views
-from . import csvupload
+import dataops.views
+from . import views, csvupload, excelupload, sqlcon_views
 
 app_name = 'dataops'
-
 urlpatterns = [
 
-    url(r'^$', views.dataops, name="list"),
-
+    # Show the upload merge menu
     url(r'^uploadmerge/$', views.uploadmerge, name="uploadmerge"),
 
-    # Row Views
-    url(r'^rowview_list/$', row_views.RowViewList.as_view(), name="rowview_list"),
+    # Show list of plugins
+    url(r'^transform/$', views.transform, name="transform"),
 
-    url(r'^rowview_new/$', row_views.rowview_create, name="rowview_new"),
+    # Show plugin diagnostics
+    url(r'^(?P<pk>\d+)/plugin_diagnose/$',
+        views.diagnose,
+        name="plugin_diagnose"),
 
-    url(r'^(?P<pk>\d+)/rowview_edit/$', row_views.rowview_update,
-        name="rowview_edit"),
-
-    url(r'^(?P<pk>\d+)/rowview_delete/$', row_views.rowview_delete,
-        name="rowview_delete"),
-
-    url(r'^(?P<pk>\d+)/rowview_dattaentry/$', row_views.rowview_dataentry,
-        name="rowview_dataentry"),
+    # Plugin invocation
+    url(r'^(?P<pk>\d+)/plugin_invoke/$', views.run,
+        name='plugin_invoke'),
 
     # Manual Data Entry
-    url(r'^rowfilter/$', views.row_filter, name="rowfilter"),
-
     url(r'^rowupdate/$', views.row_update, name="rowupdate"),
 
     url(r'^rowcreate/$', views.row_create, name="rowcreate"),
 
-    # CSV Update/Merge
+    # CSV Upload/Merge
     url(r'^csvupload1/$', csvupload.csvupload1, name='csvupload1'),
 
-    # Update/Merge
+    # Excel Upload/Merge
+    url(r'^excelupload1/$', excelupload.excelupload1, name='excelupload1'),
+
+    # Upload/Merge
     url(r'^upload_s2/$', dataops.upload.upload_s2, name='upload_s2'),
 
     url(r'^upload_s3/$', dataops.upload.upload_s3, name='upload_s3'),
 
     url(r'^upload_s4/$', dataops.upload.upload_s4, name='upload_s4'),
 
+    # SQL Connections
+    url(r'^sqlconns/$', sqlcon_views.sqlconnection_index, name="sqlconns"),
+
+    url(r'sqlconn_add/$', sqlcon_views.sqlconn_add, name="sqlconn_add"),
+
+    url(r'^(?P<pk>\d+)/sqlconn_edit/$',
+        sqlcon_views.sqlconn_edit,
+        name="sqlconn_edit"),
+
+    url(r'^(?P<pk>\d+)/sqlconn_clone/$',
+        sqlcon_views.sqlconn_clone,
+        name="sqlconn_clone"),
+
+    url(r'^(?P<pk>\d+)/sqlconn_delete/$',
+        sqlcon_views.sqlconn_delete,
+        name="sqlconn_delete"),
+
+    url(r'^(?P<pk>\d+)/sqlupload1/$',
+        sqlcon_views.sqlupload1,
+        name="sqlupload1"),
 ]
+
