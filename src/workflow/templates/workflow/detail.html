@@ -1,12 +1,13 @@
 {% extends 'base.html' %}
 {% load i18n %}
-{% load settings %}
+{% load ontask_tags %}
 {% load static %}
 {% load django_tables2 %}
 {% load crispy_forms_tags %}
 {% load widget_tweaks %}
+{% block title %}{{ block.super }}{% trans 'Details' %}{% endblock %}
 {% block extrahead %}
-  <link rel="stylesheet" href="//cdn.datatables.net/1.10.16/css/dataTables.bootstrap.min.css">
+  {% ontask_datatables_bootstrap_css %}
   <link href="{% static 'css/datetimepicker.css' %}" rel="stylesheet">
   <link href="{% static 'site/css/sol.css' %}" rel="stylesheet">
 {% endblock extrahead %}
@@ -14,10 +15,10 @@
   {% if workflow %}
     <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
     <script src="{% static 'site/js/sol.js' %}"></script>
-    <script src="{% static 'workflow/js/workflow.js' %}{% otv %}"></script>
-    <script src="{% static 'workflow/js/column_move.js' %}{% otv %}"></script>
-    <script src="//cdn.datatables.net/1.10.16/js/jquery.dataTables.min.js"></script>
-    <script src="//cdn.datatables.net/1.10.16/js/dataTables.bootstrap.min.js"></script>
+    <script src="{% static 'workflow/js/workflow.js' %}?v={% ontask_version %}"></script>
+    <script src="{% static 'workflow/js/column_move.js' %}?v={% ontask_version %}"></script>
+    {% ontask_datatables_jquery_js %}
+    {% ontask_datatables_bootstrap_js %}
     <script type="text/javascript">
       if (document.getElementById("column-table") != null) {
           // Required for DataTables
@@ -36,6 +37,7 @@
                   "columns": [
                     {"data": "number", "class": "dt-center"},
                     {"data": "name", "class": "dt-center"},
+                    {"data": "description", "class": "dt-center"},
                     {"data": "type", "class": "dt-center"},
                     {"data": "key", "class": "dt-center"},
                     {"data": "operations", "class": "dt-center operations"},
@@ -55,7 +57,6 @@
     </script>
   {% endif %}
 {% endblock %}
-{% block title %}{{ block.super }}{% trans 'Details' %}{% endblock %}
 {% block container %}
 <div class="container text-center">
   <h1 class="page-header">{{ workflow.name }}</h1>
@@ -85,6 +86,7 @@
             <tr>
               <th class="number">#</th>
               <th class="name">{% trans 'Name' %}</th>
+              <th class="name">{% trans 'Description' %}</th>
               <th class="type">{% trans 'Type' %}</th>
               <th class="key">{% trans 'Key?' %}</th>
               <th class="operations">{% trans 'Operations' %}</th>

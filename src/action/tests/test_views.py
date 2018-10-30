@@ -242,14 +242,14 @@ class ActionActionEdit(test.OntaskLiveTestCase):
         # Click in the page to send email
         element = self.search_action('simple action')
         element.find_element_by_link_text("Email").click()
-
-        # Set the subject of the email
-        self.selenium.find_element_by_id('id_subject').send_keys('Subject TXT')
         WebDriverWait(self.selenium, 10).until(
             EC.text_to_be_present_in_element(
                 (By.CLASS_NAME, 'page-header'),
                 'Send emails')
         )
+
+        # Set the subject of the email
+        self.selenium.find_element_by_id('id_subject').send_keys('Subject TXT')
 
         # Set the email column
         select = Select(self.selenium.find_element_by_id(
@@ -644,7 +644,7 @@ class ActionActionRenameEffect(test.OntaskLiveTestCase):
         self.selenium.find_element_by_id("id_name").clear()
         self.selenium.find_element_by_id("id_name").send_keys("Registered new")
         self.selenium.find_element_by_xpath(
-            "(//button[@type='submit'])[2]"
+            "//div[@id='modal-item']//button[@type='submit']"
         ).click()
         WebDriverWait(self.selenium, 10).until_not(
             EC.presence_of_element_located(

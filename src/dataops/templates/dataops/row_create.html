@@ -1,18 +1,18 @@
 {% extends 'base.html' %}
 {% load i18n %}
-{% load settings %}
+{% load ontask_tags %}
 {% load static %}
 {% load django_tables2 %}
 {% load crispy_forms_tags %}
 {% load widget_tweaks %}
+{% block title %}{{ block.super }}{% trans 'Add row' %}{% endblock %}
 {% block extrahead %}
   <link href="{% static 'css/datetimepicker.css' %}" rel="stylesheet">
   <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
 {% endblock extrahead %}
 {% block scripts %}
-  <script src="{% static 'dataops/js/dataops.js' %}{% otv %}"></script>
+  <script src="{% static 'dataops/js/dataops.js' %}?v={% ontask_version %}"></script>
 {% endblock %}
-{% block title %}{{ block.super }}{% trans 'Add row' %}{% endblock %}
 {% block container %}
 <div align="center" class="container">
   <h1 class="page-header">{% trans 'Add row' %}</h1>

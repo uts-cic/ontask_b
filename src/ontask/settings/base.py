@@ -81,7 +81,7 @@ TEMPLATES = [
                 'ontask.context_processors.conf_to_context',
             ],
             'libraries': {
-                'settings': 'ontask.templatetags.settings',
+                'ontask_tags': 'ontask.templatetags.ontask_tags',
                 'vis_include': 'visualizations.templatetags.vis_include',
             }
         },
@@ -267,6 +267,11 @@ DATABASES = {
 # https://docs.djangoproject.com/en/dev/topics/i18n/
 
 LANGUAGE_CODE = 'en-us'
+
+LANGUAGES = (
+    ('en-us', _('English')),
+    ('es-es', _('Spanish')),
+)
 
 TIME_ZONE = env('TIME_ZONE')
 

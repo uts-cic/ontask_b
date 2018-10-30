@@ -2,10 +2,8 @@
 from __future__ import unicode_literals, print_function
 
 import os
-import time
 
 from django.conf import settings
-from django.shortcuts import reverse
 from django.utils.html import escape
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -399,6 +397,9 @@ class DataopsExcelUpload(test.OntaskLiveTestCase):
             EC.element_to_be_clickable(
                 (By.ID, 'checkAll'))
         )
+        WebDriverWait(self.selenium, 10).until_not(
+            EC.visibility_of_element_located((By.ID, 'div-spinner'))
+        )
         self.selenium.find_element_by_name("Submit").click()
         self.wait_for_datatable('column-table_previous')
 
@@ -483,6 +484,9 @@ class DataopsNaNProcessing(test.OntaskLiveTestCase):
                 (By.XPATH, "//form")
             )
         )
+        WebDriverWait(self.selenium, 10).until_not(
+            EC.visibility_of_element_located((By.ID, 'div-spinner'))
+        )
 
         # Select file and upload
         self.selenium.find_element_by_id("id_file").send_keys(
@@ -492,10 +496,7 @@ class DataopsNaNProcessing(test.OntaskLiveTestCase):
                          'test_df_merge_update_df1.csv')
         )
         self.selenium.find_element_by_name("Submit").click()
-        WebDriverWait(self.selenium, 10).until(
-            EC.text_to_be_present_in_element((By.CLASS_NAME, 'page-header'),
-                                             'Step 2: Select Columns')
-        )
+        self.wait_for_page()
 
         # Submit
         self.selenium.find_element_by_xpath(
@@ -612,9 +613,7 @@ class DataopsPluginExecution(test.OntaskLiveTestCase):
         ).click()
 
         # Click outside the SOL widget
-        self.selenium.find_element_by_class_name(
-            'sol-current-selection'
-        ).click()
+        self.selenium.find_element_by_id('div_id_merge_key').click()
 
         self.selenium.find_element_by_id("id_merge_key").click()
         Select(self.selenium.find_element_by_id(
@@ -720,9 +719,7 @@ class DataopsPluginExecution(test.OntaskLiveTestCase):
         )).select_by_visible_text("email")
         # Submit the execution
         self.selenium.find_element_by_name("Submit").click()
-        WebDriverWait(self.selenium, 10).until(
-            EC.presence_of_element_located((By.ID, 'plugin-execution-report'))
-        )
+        self.wait_for_page(element_id='plugin-execution-report')
 
         # Done. Click continue.
         self.selenium.find_element_by_link_text('Continue').click()

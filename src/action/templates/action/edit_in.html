@@ -1,25 +1,26 @@
 {% extends 'base.html' %}
 {% load i18n %}
-{% load settings %}
+{% load ontask_tags %}
 {% load static %}
 {% load widget_tweaks %}
 {% load django_tables2 %}
+{% block title %}{{ block.super }}{% trans 'Edit Action In' %}{% endblock %}
 {% block styles %}
   <link href="{% static 'site/css/sol.css' %}" rel="stylesheet">
   <link href="{% static 'site/css/main.css' %}" rel="stylesheet">
 {% endblock styles %}
 {% block extrahead %}
   <link href="{% static 'site/css/query-builder.default.min.css' %}" rel="stylesheet">
-  <link rel="stylesheet" href="//cdn.datatables.net/1.10.16/css/dataTables.bootstrap.min.css">
+  {% ontask_datatables_bootstrap_css %}
   <link href="{% static 'css/datetimepicker.css' %}" rel="stylesheet">
 {% endblock extrahead %}
 {% block scripts %}
   <script src="{% static 'js/bootstrap-datetimepicker.js' %}"></script>
   <script src="{% static 'site/js/query-builder.standalone.min.js' %}" ></script>
   <script src="{% static 'site/js/sol.js' %}"></script>
-  <script src="{% static 'action/js/action.js' %}{% otv %}"></script>
-  <script src="//cdn.datatables.net/1.10.16/js/jquery.dataTables.min.js"></script>
-  <script src="//cdn.datatables.net/1.10.16/js/dataTables.bootstrap.min.js"></script>
+  <script src="{% static 'action/js/action.js' %}?v={% ontask_version %}"></script>
+  {% ontask_datatables_jquery_js %}
+  {% ontask_datatables_bootstrap_js %}
   <script type="text/javascript">
     var qbuilder_options = {
       plugins: ['bt-tooltip-errors', 'not-group'],
@@ -52,7 +53,6 @@
     }
   </script>
 {% endblock %}
-{% block title %}{{ block.super }}{% trans 'Edit Action In' %}{% endblock %}
 {% block container %}
   <div align="center" class="container" id="action-in-editor">
     <h1 class="page-header"><strong>{{ action.name }}</strong> <small>({{ action.get_action_type_display }})</small></h1>
@@ -137,42 +137,32 @@
         <h4>{% trans 'Columns to obtain and store the data' %}</h4>
       </div>
     </div>
-    <div class="row row-bottom-border">
+    <div class="row row-bottom-border" id="column-names">
       {% if not has_no_key %}
         <p class="alert-danger">{% trans 'There must be at least one non-key column.' %}</p>
       {% endif %}
       {% if has_empty_description %}
         <p class="alert-danger">{% trans 'All items should have non-empty descriptions.' %}</p>
       {% endif %}
-      <div id="column-names">
-        <div style="display: table-cell; padding-right: 1ex;">Insert</div>
-        <div style="display: table-cell; padding-right: 1ex;">
-            <select id="select-column-name">
-              <option value="">- {% trans 'Column' %} -</option>
-              {% for col in columns_to_insert %}
-                <option
-                  value="{% url 'action:select_column_action' action.id col.id %}">{{ col.name }}</option>
-              {% endfor %}
-            </select>
-        </div>
-        <div style="display: table-cell; padding-right: 1ex;">
-          <button type="button"
-                  class="btn btn-primary btn-sm js-workflow-column-add"
-                  data-url="{% url 'workflow:column_add' %}"
-                  data-toggle="tooltip"
-                  title="{% trans 'Add a new column to the workflow' %}">
-            <span class="glyphicon glyphicon-plus"></span> {% trans 'Add column' %}
-          </button>
-        </div>
-        <div style="display: table-cell; padding-right: 1ex;">
-          <button type="button"
-                  class="btn btn-primary btn-sm js-workflow-formula-column-add"
-                  data-url="{% url 'workflow:formula_column_add' %}"
-                  data-toggle="tooltip"
-                  title="{% trans 'Add a new derived column to the workflow' %}">
-            <span class="glyphicon glyphicon-plus"></span> {% trans 'Add formula-derived column' %}
-          </button>
-        </div>
+      <div>Insert existing question (choose it and will be automatically added)</div>
+      <div>
+          <select id="select-column-name">
+            <option value="">- {% trans 'Question' %} -</option>
+            {% for col in columns_to_insert %}
+              <option
+                value="{% url 'action:select_column_action' action.id col.id %}">{{ col.name }}</option>
+            {% endfor %}
+          </select>
+      </div>
+      <div><p>or</p></div>
+      <div>
+        <button type="button"
+                class="btn btn-primary btn-sm js-workflow-question-add"
+                data-url="{% url 'workflow:question_add' action.id %}"
+                data-toggle="tooltip"
+                title="{% trans 'Add a new question to the action' %}">
+          <span class="glyphicon glyphicon-plus"></span> {% trans 'Create new question' %}
+        </button>
       </div>
       <div class="container-fluid" id="column-selection"
            style="display: table-cell; padding-right: 1ex;padding-top:1ex;">
@@ -196,7 +186,7 @@
               title="{% trans 'Save and remain editing' %}">
         <span class="glyphicon glyphicon-ok"></span> {% trans 'Done' %}
       </a>
-      <a href="{% url 'action:run' action.id %}"
+      <a href="{% url 'action:run_action_in' action.id %}"
          class="btn btn-primary spin {% if not action.is_executable %}disabled{% endif %}"
          data-toggle="tooltip"
          title="{% trans 'Enter data manually' %}">

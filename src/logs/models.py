@@ -43,6 +43,7 @@ class Log(models.Model):
     WORKFLOW_IMPORT = 'workflow_import'
     WORKFLOW_CLONE = 'workflow_clone'
     COLUMN_ADD = 'column_add'
+    QUESTION_ADD = 'question_add'
     COLUMN_ADD_FORMULA = 'column_add_formula'
     COLUMN_ADD_RANDOM = 'column_add_random'
     COLUMN_RENAME = 'column_rename'
@@ -84,6 +85,7 @@ class Log(models.Model):
     SCHEDULE_EMAIL_EDIT = 'schedule_email_edit'
     SCHEDULE_EMAIL_DELETE = 'schedule_email_delete'
     SCHEDULE_EMAIL_EXECUTE = 'schedule_email_execute'
+    DOWNLOAD_ZIP_ACTION = 'download_zip_action'
     SCHEDULE_JSON_EDIT = 'schedule_json_edit'
     SCHEDULE_JSON_DELETE = 'schedule_json_delete'
     SCHEDULE_JSON_EXECUTE = 'schedule_json_execute'
@@ -145,6 +147,7 @@ class Log(models.Model):
         (SCHEDULE_EMAIL_EDIT, _('Edit scheduled email action')),
         (SCHEDULE_EMAIL_DELETE, _('Delete scheduled email action')),
         (SCHEDULE_EMAIL_EXECUTE, _('Execute scheduled email action')),
+        (DOWNLOAD_ZIP_ACTION, _('Download a ZIP with personalized text')),
         (SCHEDULE_JSON_EDIT, _('Edit scheduled JSON action')),
         (SCHEDULE_JSON_DELETE, _('Delete scheduled JSON action')),
         (SCHEDULE_JSON_EXECUTE, _('Execute scheduled JSON action')),

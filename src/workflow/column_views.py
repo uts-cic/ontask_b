@@ -7,19 +7,20 @@ from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
+from django.db.models import Q
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import ugettext_lazy as _
 
-from action.models import Condition
+from action.models import Condition, Action
 from dataops import ops, formula_evaluation, pandas_db
 from logs.models import Log
 from ontask.permissions import is_instructor
 from .forms import (ColumnRenameForm,
                     ColumnAddForm,
                     FormulaColumnAddForm,
-                    RandomColumnAddForm)
+                    RandomColumnAddForm, QuestionAddForm, QuestionRenameForm)
 from .models import Column
 from .ops import (
     get_workflow,
@@ -51,11 +52,15 @@ formula_column_operands = [
 
 
 @user_passes_test(is_instructor)
-def column_add(request):
+def column_add(request, pk=None):
     # TODO: Encapsulate operations in a function so that is available for the
     #  API
     # Data to send as JSON response
     data = {}
+
+    # Detect if this operation is to add a new column or a new question (in
+    # the edit in page)
+    is_question = pk is not None
 
     # Get the workflow element
     workflow = get_workflow(request)
@@ -67,22 +72,53 @@ def column_add(request):
     if workflow.nrows == 0:
         data['form_is_valid'] = True
         data['html_redirect'] = ''
-        messages.error(
-            request,
-            _('Cannot add column to a workflow without data')
-        )
+        if is_question:
+            messages.error(
+                request,
+                _('Cannot add question to a workflow without data')
+            )
+        else:
+            messages.error(
+                request,
+                _('Cannot add column to a workflow without data')
+            )
         return JsonResponse(data)
 
+    action_id = None
+    if pk:
+        # Get the action and the columns
+        try:
+            action = Action.objects.filter(
+                Q(workflow__user=request.user) |
+                Q(workflow__shared=request.user)
+            ).distinct().get(pk=pk)
+        except ObjectDoesNotExist:
+            messages.error(
+                request,
+                _('Cannot find action to add question.')
+            )
+            return JsonResponse({'html_redirect': reverse('action:index')})
+        action_id = action.id
+
     # Form to read/process data
-    form = ColumnAddForm(request.POST or None, workflow=workflow)
+    if is_question:
+        form = QuestionAddForm(request.POST or None, workflow=workflow)
+    else:
+        form = ColumnAddForm(request.POST or None, workflow=workflow)
 
     # If a GET or incorrect request, render the form again
     if request.method == 'GET' or not form.is_valid():
-        data['html_form'] = render_to_string(
-            'workflow/includes/partial_column_addedit.html',
-            {'form': form,
-             'add': True},
-            request=request)
+        if is_question:
+            template = 'workflow/includes/partial_question_addedit.html'
+        else:
+            template = 'workflow/includes/partial_column_addedit.html'
+
+        data['html_form'] = render_to_string(template,
+                                             {'form': form,
+                                              'is_question': is_question,
+                                              'action_id': action_id,
+                                              'add': True},
+                                             request=request)
 
         return JsonResponse(data)
 
@@ -101,7 +137,7 @@ def column_add(request):
     # it was loaded when validating it.
     df = pandas_db.load_from_db(workflow.id)
 
-    # Add the column with the initial value
+    # Add the column with the initial value to the dataframe
     df = ops.data_frame_add_column(df, column, column_initial_value)
 
     # Update the column type with the value extracted from the data frame
@@ -116,9 +152,17 @@ def column_add(request):
     # Store the df to DB
     ops.store_dataframe_in_db(df, workflow.id)
 
+    # If the column is a question, add it to the action
+    if is_question:
+        action.columns.add(column)
+
     # Log the event
+    if is_question:
+        event_type = Log.QUESTION_ADD
+    else:
+        event_type = Log.COLUMN_ADD
     Log.objects.register(request.user,
-                         Log.COLUMN_ADD,
+                         event_type,
                          workflow,
                          {'id': workflow.id,
                           'name': workflow.name,
@@ -402,6 +446,10 @@ def column_edit(request, pk):
     # Data to send as JSON response
     data = {}
 
+    # Detect if this operation is to edit a new column or a new question (in
+    # the edit in page)
+    is_question = 'question_edit' in request.path_info
+
     # Get the workflow element
     workflow = get_workflow(request)
     if not workflow:
@@ -421,9 +469,14 @@ def column_edit(request, pk):
         return JsonResponse(data)
 
     # Form to read/process data
-    form = ColumnRenameForm(request.POST or None,
-                            workflow=workflow,
-                            instance=column)
+    if is_question:
+        form = QuestionRenameForm(request.POST or None,
+                                  workflow=workflow,
+                                  instance=column)
+    else:
+        form = ColumnRenameForm(request.POST or None,
+                                workflow=workflow,
+                                instance=column)
 
     old_name = column.name
     # Keep a copy of the previous position
@@ -433,10 +486,13 @@ def column_edit(request, pk):
                'pk': pk}
 
     if request.method == 'GET' or not form.is_valid():
-        data['html_form'] = render_to_string(
-            'workflow/includes/partial_column_addedit.html',
-            context,
-            request=request)
+        if is_question:
+            template = 'workflow/includes/partial_question_addedit.html'
+        else:
+            template = 'workflow/includes/partial_column_addedit.html'
+        data['html_form'] = render_to_string(template,
+                                             context,
+                                             request=request)
 
         return JsonResponse(data)
 
@@ -481,8 +537,12 @@ def column_edit(request, pk):
     data['html_redirect'] = ''
 
     # Log the event
+    if is_question:
+        event_type = Log.QUESTION_ADD
+    else:
+        event_type = Log.COLUMN_ADD
     Log.objects.register(request.user,
-                         Log.COLUMN_RENAME,
+                         event_type,
                          workflow,
                          {'id': workflow.id,
                           'name': workflow.name,

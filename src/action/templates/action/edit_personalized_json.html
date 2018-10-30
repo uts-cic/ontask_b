@@ -1,22 +1,19 @@
 {% extends 'base.html' %}
 {% load i18n %}
-{% load settings %}
+{% load ontask_tags %}
 {% load static %}
 {% load crispy_forms_tags %}
 {% load widget_tweaks %}
+{% block title %}{{ block.super }}{% trans 'Edit Personalized Text' %}{% endblock %}
 {% block extrahead %}
   <link href="{% static 'site/css/query-builder.default.min.css' %}"
         rel="stylesheet">
-  {{ form.media }}
-  {% comment %}
-  {% for script_src in vis_scripts %}
-    <script src="{{ script_src|safe }}"></script>
-  {% endfor %}
-  {% endcomment %}
+  {{ form.media.css }}
 {% endblock extrahead %}
 {% block scripts %}
+  {{ form.media.js }}
   <script src="{% static 'site/js/query-builder.standalone.min.js' %}"></script>
-  <script src="{% static 'action/js/action.js' %}{% otv %}"></script>
+  <script src="{% static 'action/js/action.js' %}?v={% ontask_version %}"></script>
   <script type="text/javascript">
     var qbuilder_options = {
       plugins: ['bt-tooltip-errors', 'not-group'],
@@ -29,7 +26,6 @@
     };
   </script>
 {% endblock %}
-{% block title %}{{ block.super }}{% trans 'Edit Personalized Text' %}{% endblock %}
 {% block container %}
   <div align="center" class="container" id="action-out-editor">
     <h1 class="page-header">{% trans 'Personalized JSON:' %} <strong>{{ action.name }}</strong></h1>
