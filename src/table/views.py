@@ -2,8 +2,10 @@
 """
 File containing functions to implement all views related to the table element.
 """
-from __future__ import unicode_literals, print_function
 
+from builtins import next
+from builtins import str
+from builtins import object
 from datetime import datetime
 
 import django_tables2 as tables
@@ -15,6 +17,7 @@ from django.db.models import Q
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import redirect, reverse, render
 from django.template.loader import render_to_string
+from django.utils.html import format_html
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils.translation import ugettext_lazy as _
@@ -33,29 +36,39 @@ class ViewTable(tables.Table):
     Table to display the set of views handled in a workflow
     """
     name = tables.Column(verbose_name=_('Name'))
+
     description_text = tables.Column(
         empty_values=[],
         verbose_name=_('Description')
     )
-    modified = tables.DateTimeColumn(verbose_name=_('Modified'))
     operations = OperationsColumn(
-        verbose_name=_('Operations'),
+        verbose_name='',
         template_file='table/includes/partial_view_operations.html',
         template_context=lambda record: {'id': record['id']}
     )
 
-    class Meta:
+    def render_name(self, record):
+        return format_html(
+            """<a href="#" class="js-view-edit"
+                  data-toggle="tooltip" data-url="{0}"
+                  title="{1}">{2}</a>""",
+            reverse('table:view_edit', kwargs={'pk': record['id']}),
+            _('Change the columns present in the view'),
+            record['name']
+        )
+
+    class Meta(object):
         """
         Select the model and specify fields, sequence and attributes
         """
         model = View
-        fields = ('name', 'description_text', 'modified', 'operations')
-        sequence = ('name', 'description_text', 'modified', 'operations')
+        fields = ('name', 'description_text', 'operations')
+        sequence = ('name', 'description_text', 'operations')
         attrs = {
-            'class': 'table display table-bordered',
+            'class': 'table table-hover table-bordered',
+            'style': 'width: 100%;',
             'id': 'view-table'
         }
-
 
 def save_view_form(request, form, template_name):
     """
@@ -115,7 +128,6 @@ def save_view_form(request, form, template_name):
     data['html_redirect'] = ''  # Refresh the page
     return JsonResponse(data)
 
-
 def render_table_display_page(request, workflow, view, columns, ajax_url):
     """
     Function to render the content of the display page taking into account
@@ -129,6 +141,7 @@ def render_table_display_page(request, workflow, view, columns, ajax_url):
     """
     # Create the initial context
     context = {
+        'workflow': workflow,
         'query_builder_ops': workflow.get_query_builder_ops_as_str(),
         'ajax_url': ajax_url,
         'views': workflow.views.all(),
@@ -138,13 +151,18 @@ def render_table_display_page(request, workflow, view, columns, ajax_url):
     # If there is a DF, add the columns
     if ops.workflow_id_has_table(workflow.id):
         context['columns'] = columns
+        context['columns_datatables'] = \
+            [{'data': 'Operations'}] + \
+            [{'data': c.name.replace('.', '\\.')} for c in columns]
+    else:
+        context['columns'] = None
+        context['columns_datatables'] = []
 
     # If using a view, add it to the context
     if view:
         context['view'] = view
 
     return render(request, 'table/display.html', context)
-
 
 def render_table_display_data(request, workflow, columns, formula,
                               view_id=None):
@@ -208,8 +226,10 @@ def render_table_display_data(request, workflow, columns, formula,
     items = 0  # For counting the number of elements in the result
     for row in qs[start:start + length]:
         items += 1
+        new_element = {}
         if view_id:
-            stat_url = reverse('table:stat_row_view', kwargs={'pk': view_id})
+            stat_url = reverse('table:stat_row_view',
+                               kwargs={'pk': view_id})
         else:
             stat_url = reverse('table:stat_row')
 
@@ -219,18 +239,18 @@ def render_table_display_data(request, workflow, columns, formula,
                          '?key={0}&val={1}'.format(key_name, row[key_idx]),
              'edit_url': reverse('dataops:rowupdate') +
                          '?update_key={0}&update_val={1}'.format(key_name,
-                                                                 row[key_idx]),
+                                                                 row[
+                                                                     key_idx]),
              'delete_key': '?key={0}&value={1}'.format(key_name,
                                                        row[key_idx]),
              'view_id': view_id}
         )
 
         # Element to add to the final queryset
-        new_element = [ops_string] + list(row)
-
-        # Tweak the date time format
-        new_element = map(lambda x: x.strftime('%Y-%m-%d %H:%M:%S %z')
-        if isinstance(x, datetime) else x, new_element)
+        new_element['Operations'] = ops_string
+        values = [x.strftime('%Y-%m-%d %H:%M:%S %z')
+                  if isinstance(x, datetime) else x for x in list(row)]
+        new_element.update(zip(column_names, values))
 
         # Create the list of elements to display and add it ot the final QS
         final_qs.append(new_element)
@@ -249,7 +269,6 @@ def render_table_display_data(request, workflow, columns, formula,
 
     return JsonResponse(data)
 
-
 @user_passes_test(is_instructor)
 def display(request):
     """
@@ -259,7 +278,7 @@ def display(request):
     """
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     return render_table_display_page(
         request,
@@ -268,7 +287,6 @@ def display(request):
         workflow.columns.all(),
         reverse('table:display_ss')
     )
-
 
 @user_passes_test(is_instructor)
 @csrf_exempt
@@ -296,7 +314,6 @@ def display_ss(request):
         None
     )
 
-
 @user_passes_test(is_instructor)
 def display_view(request, pk):
     """
@@ -307,7 +324,7 @@ def display_view(request, pk):
     """
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     try:
         view = View.objects.get(pk=pk, workflow=workflow)
@@ -322,7 +339,6 @@ def display_view(request, pk):
         view.columns.all(),
         reverse('table:display_view_ss', kwargs={'pk': view.id})
     )
-
 
 @user_passes_test(is_instructor)
 @csrf_exempt
@@ -360,7 +376,6 @@ def display_view_ss(request, pk):
         view.id
     )
 
-
 @user_passes_test(is_instructor)
 def row_delete(request):
     """
@@ -370,7 +385,7 @@ def row_delete(request):
     """
     # We only accept ajax requests here
     if not request.is_ajax():
-        return redirect('workflow:index')
+        return redirect('home')
 
     # Result to return
     data = {}
@@ -378,7 +393,7 @@ def row_delete(request):
     # Get the workflow
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     # Get the key/value pair to delete
     key = request.GET.get('key', None)
@@ -419,7 +434,6 @@ def row_delete(request):
 
     return JsonResponse(data)
 
-
 @user_passes_test(is_instructor)
 def view_index(request):
     """
@@ -431,14 +445,13 @@ def view_index(request):
     # Get the appropriate workflow object
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     # Get the views
-    views = View.objects.filter(
-        workflow__id=workflow.id).values('id',
-                                         'name',
-                                         'description_text',
-                                         'modified')
+    views = workflow.views.values('id',
+                                  'name',
+                                  'description_text',
+                                  'modified')
 
     # Context to render the template
     context = {
@@ -449,7 +462,6 @@ def view_index(request):
     context['table'] = ViewTable(views, orderable=False)
 
     return render(request, 'table/view_index.html', context)
-
 
 @user_passes_test(is_instructor)
 def view_add(request):
@@ -463,7 +475,7 @@ def view_add(request):
     if not workflow:
         return JsonResponse(
             {'form_is_valid': True,
-             'html_redirect': reverse('workflow:index')}
+             'html_redirect': reverse('home')}
         )
 
     if workflow.nrows == 0:
@@ -482,7 +494,6 @@ def view_add(request):
                           form,
                           'table/includes/partial_view_add.html')
 
-
 @user_passes_test(is_instructor)
 def view_edit(request, pk):
     """
@@ -496,7 +507,7 @@ def view_edit(request, pk):
     if not workflow:
         return JsonResponse(
             {'form_is_valid': True,
-             'html_redirect': reverse('workflow:index')}
+             'html_redirect': reverse('home')}
         )
 
     if workflow.nrows == 0:
@@ -528,7 +539,6 @@ def view_edit(request, pk):
     return save_view_form(request,
                           form,
                           'table/includes/partial_view_edit.html')
-
 
 @user_passes_test(is_instructor)
 def view_delete(request, pk):
@@ -576,7 +586,6 @@ def view_delete(request, pk):
         request=request)
     return JsonResponse(data)
 
-
 @user_passes_test(is_instructor)
 def view_clone(request, pk):
     """
@@ -592,7 +601,7 @@ def view_clone(request, pk):
     workflow = get_workflow(request)
     if not workflow:
         data['form_is_valid'] = True
-        data['html_redirect'] = reverse('workflow:index')
+        data['html_redirect'] = reverse('home')
         return JsonResponse(data)
 
     context = {'pk': pk}  # For rendering
@@ -647,7 +656,6 @@ def view_clone(request, pk):
 
     return JsonResponse({'form_is_valid': True, 'html_redirect': ''})
 
-
 @user_passes_test(is_instructor)
 def csvdownload(request, pk=None):
     """
@@ -660,7 +668,7 @@ def csvdownload(request, pk=None):
     # Get the appropriate workflow object
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     # Check if dataframe is present
     if not ops.workflow_id_has_table(workflow.id):
@@ -682,10 +690,11 @@ def csvdownload(request, pk=None):
                                     kwargs={'pk': workflow.id}))
 
     # Fetch the data frame
-    data_frame = pandas_db.get_subframe(
-        workflow.id,
-        view,
-        [x.name for x in view.columns.all()] if view is not None else None)
+    if view:
+        col_names = [x.name for x in view.columns.all()]
+    else:
+        col_names = workflow.get_column_names()
+    data_frame = pandas_db.get_subframe(workflow.id, view, col_names)
 
     # Create the response object
     response = HttpResponse(content_type='text/csv')

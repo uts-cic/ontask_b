@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-#
-from __future__ import unicode_literals, print_function
 
+
+from builtins import object
 from builtins import str
 from django.utils.translation import ugettext_lazy as _
 from rest_framework import serializers
@@ -23,7 +24,7 @@ class WorkflowListSerializer(serializers.ModelSerializer):
             )
 
         if any([not isinstance(k, str) or not isinstance(v, str)
-                for k, v in attributes.items()]):
+                for k, v in list(attributes.items())]):
             raise APIException(_('Attributes must be a dictionary (str, str)'))
 
         workflow_obj = None
@@ -45,7 +46,7 @@ class WorkflowListSerializer(serializers.ModelSerializer):
 
         return workflow_obj
 
-    class Meta:
+    class Meta(object):
         model = Workflow
         fields = ('id', 'name', 'description_text', 'attributes')
 
@@ -132,7 +133,9 @@ class WorkflowExportSerializer(serializers.ModelSerializer):
             # Load the data frame
             data_frame = validated_data.get('data_frame', None)
             if data_frame is not None:
-                ops.store_dataframe_in_db(data_frame, workflow_obj.id)
+                ops.store_dataframe_in_db(data_frame,
+                                          workflow_obj.id,
+                                          reset_keys=False)
 
                 # Reconcile now the information in workflow and columns with the
                 # one loaded
@@ -176,7 +179,7 @@ class WorkflowExportSerializer(serializers.ModelSerializer):
 
         return workflow_obj
 
-    class Meta:
+    class Meta(object):
         model = Workflow
         # fields = ('description_text', 'nrows', 'ncols', 'attributes',
         #           'query_builder_ops', 'columns', 'data_frame', 'actions')

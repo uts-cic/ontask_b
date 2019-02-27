@@ -1,17 +1,13 @@
 {% load i18n %}
 <div class="js-transform-diagnose-view">
   <div class="modal-header">
+    <h4 class="modal-title">{% trans 'Diagnostics' %}</h4>
     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
       <span aria-hidden="true">&times;</span>
     </button>
-    <h4 class="modal-title">{% trans 'Diagnostics' %}</h4>
-  </div>
-  <div class="modal-body text-center">
-    <button type="button" class="btn btn-default" data-dismiss="modal">{% trans 'Close' %}
-    </button>
   </div>
   <div class="modal-body">
-    <table class="table table-bordered" id="transform-diagnostics-table">
+    <table class="table" id="transform-diagnostics-table">
       <thead>
         <tr>
           <th class="text-center">{% trans 'Status' %}</th>
@@ -20,13 +16,17 @@
       </thead>
       <tbody>
         {% for item in diagnostic_table %}
-          <tr {% if item.0 != "Ok" and item.0 != "Unchecked" %}class="danger"{% endif %}>
+          <tr {% if item.0 != "Ok" and item.0 != "Unchecked" %}class="alert alert-danger"{% endif %}>
             <td class="text-center">{{ item.0 }}</td>
             <td>{{ item.1 }}</td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-outline-dark" data-dismiss="modal">{% trans 'Close' %}
+    </button>
   </div>
 </div>
 

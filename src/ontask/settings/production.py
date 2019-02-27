@@ -5,19 +5,17 @@ import logging.config
 
 from .base import *  # NOQA
 
-# In production set the environment variable like this:
-#    DJANGO_SETTINGS_MODULE=ontask.settings.production
-
 # For security and performance reasons, DEBUG is turned off
 DEBUG = False
-TEMPLATE_DEBUG = False
 
 # Must mention ALLOWED_HOSTS in production!
 ALLOWED_HOSTS = [os.environ['DOMAIN_NAME']]
 
 # Additional middleware introduced by debug toolbar
-MIDDLEWARE_CLASSES += (
-   'django.middleware.security.SecurityMiddleware',)
+MIDDLEWARE += ['django.middleware.security.SecurityMiddleware']
+
+# Show emails to console
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 #
 # Security features
@@ -35,6 +33,12 @@ SECURE_HSTS_PRELOAD = True
 # Folder to scan for plugins
 #
 DATAOPS_PLUGIN_DIRECTORY = os.path.join(PROJECT_PATH, 'plugins')
+
+#
+# Execute the JSON transfers for the required actions
+#
+EXECUTE_ACTION_JSON_TRANSFER = env.bool('EXECUTE_ACTION_JSON_TRANSFER',
+                                        default=True)
 
 # Cache the templates in memory for speed-up
 loaders = [
@@ -68,6 +72,12 @@ LOGGING = {
         },
     },
     'handlers': {
+        'django_log_file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': join(LOGFILE_ROOT, 'django.log'),
+            'formatter': 'verbose'
+        },
         'proj_log_file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
@@ -80,10 +90,10 @@ LOGGING = {
             'filename': join(LOGFILE_ROOT, 'script.log'),
             'formatter': 'verbose'
         },
-        'scheduler_log_file': {
+        'celery_log_file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': join(LOGFILE_ROOT, 'scheduler.log'),
+            'filename': join(LOGFILE_ROOT, 'celery.log'),
             'formatter': 'verbose'
         },
         'console': {
@@ -93,9 +103,14 @@ LOGGING = {
         }
     },
     'loggers': {
+        'django': {
+            'handlers': ['django_log_file'],
+            'propagate': True,
+            'level': 'ERROR',
+        },
         'project': {
             'handlers': ['proj_log_file'],
-            'level': 'DEBUG',
+            'level': 'ERROR',
         },
         'django.request': {
             'handlers': ['proj_log_file'],
@@ -107,8 +122,8 @@ LOGGING = {
             'propagate': True,
             'level': 'DEBUG',
         },
-        'scripts.scheduler': {
-            'handlers': ['scheduler_log_file'],
+        'celery_execution': {
+            'handlers': ['celery_log_file'],
             'propagate': True,
             'level': 'DEBUG',
         },

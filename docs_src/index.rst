@@ -5,12 +5,16 @@
    Use: # * = - ^ " as heading hierarchy
 
 ############################################
-OnTask documentation (Ver. |ontask_version|)
+OnTask documentation
 ############################################
 
+************************
+Version |ontask_version|
+************************
+
 .. toctree::
-   :maxdepth: 3
-   :caption: Contents:
+   :numbered:
+   :maxdepth: 2
 
    Introduction/index
    Install/index

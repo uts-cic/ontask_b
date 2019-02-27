@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
 
+
+from builtins import object
 import datetime
 import itertools
 import re
@@ -14,9 +15,12 @@ from django.utils.html import escape
 from django.utils.translation import ugettext_lazy as _
 
 from dataops import formula_evaluation, pandas_db
-from dataops.formula_evaluation import get_variables, evaluate_top_node
+from dataops.formula_evaluation import (
+    get_variables, evaluate,
+    NodeEvaluation
+)
 from logs.models import Log
-from ontask import OntaskException
+import ontask
 from workflow.models import Workflow, Column
 
 # Regular expressions detecting the use of a variable, or the
@@ -32,17 +36,28 @@ class Action(models.Model):
     @DynamicAttrs
     """
 
-    PERSONALIZED_TEXT = 'personalized_text'
-    PERSONALIZED_JSON = 'personalized_json'
-    SURVEY = 'survey'
-    TODO_LIST = 'todo_list'
+    PERSONALIZED_TEXT = ontask.PERSONALIZED_TEXT
+    PERSONALIZED_CANVAS_EMAIL = ontask.PERSONALIZED_CANVAS_EMAIL
+    PERSONALIZED_JSON = ontask.PERSONALIZED_JSON
+    SURVEY = ontask.SURVEY
+    TODO_LIST = ontask.TODO_LIST
 
-    ACTION_TYPES = [
-        (PERSONALIZED_TEXT, _('Personalized text')),
-        (PERSONALIZED_JSON, _('Personalized JSON')),
-        (SURVEY, _('Survey')),
-        (TODO_LIST, _('TODO List'))
-    ]
+    ACTION_TYPES = ontask.ACTION_TYPES
+
+    AVAILABLE_ACTION_TYPES = ontask.diff(
+        ACTION_TYPES,
+        [x for x in ACTION_TYPES if x[0] in settings.DISABLED_ACTIONS])
+
+    assert len(AVAILABLE_ACTION_TYPES) != 0, \
+        "All actions disabled. Review DISABLED_ACTIONS in base.py"
+
+    if not settings.CANVAS_INFO_DICT:
+        # If the variable CANVAS_INFO_DICT is empty, the choice for Canvas
+        # Email action should be removed.
+        AVAILABLE_ACTION_TYPES.remove(
+            next(x for x in ACTION_TYPES
+                 if x[0] == ontask.PERSONALIZED_CANVAS_EMAIL)
+        )
 
     workflow = models.ForeignKey(
         Workflow,
@@ -104,7 +119,8 @@ class Action(models.Model):
     columns = models.ManyToManyField(Column, related_name='actions_in')
 
     #
-    # Field for actions PERSONALIZED_TEXT and PERSONALIZED_JSON
+    # Field for actions PERSONALIZED_TEXT, PERSONALIZED_CAVNAS_EMAIL and
+    # PERSONALIZED_JSON
     #
     # Text to be personalised for action OUT
     content = models.TextField(default='', null=False, blank=True)
@@ -146,6 +162,9 @@ class Action(models.Model):
 
         if self.action_type == Action.PERSONALIZED_TEXT:
             return True
+
+        if self.action_type == Action.PERSONALIZED_CANVAS_EMAIL:
+            return settings.CANVAS_INFO_DICT is not None
 
         if self.action_type == Action.PERSONALIZED_JSON:
             # If None or empty, return false
@@ -246,7 +265,8 @@ class Action(models.Model):
         """
 
         if self.action_type == self.PERSONALIZED_TEXT or \
-                self.action_type == self.PERSONALIZED_JSON:
+                self.action_type == self.PERSONALIZED_JSON or \
+                self.action_type == self.PERSONALIZED_CANVAS_EMAIL:
             # Need to change name appearances in content
             new_text = var_use_res[0].sub(
                 lambda m: '{{ ' +
@@ -332,11 +352,12 @@ class Action(models.Model):
                 'name', 'is_filter', 'formula'):
             # Evaluate the condition
             try:
-                condition_eval[condition['name']] = evaluate_top_node(
+                condition_eval[condition['name']] = evaluate(
                     condition['formula'],
+                    NodeEvaluation.EVAL_EXP,
                     row_values
                 )
-            except OntaskException:
+            except ontask.OnTaskException:
                 # Something went wrong evaluating a condition. Stop.
                 return None
 
@@ -346,7 +367,7 @@ class Action(models.Model):
 
         return dict(dict(row_values, **condition_eval), **attributes)
 
-    class Meta:
+    class Meta(object):
         """
         Define the criteria of uniqueness with name in workflow and order by
         name
@@ -367,7 +388,7 @@ class Condition(models.Model):
                                blank=False,
                                related_name='conditions')
 
-    name = models.CharField(max_length=256, blank=False, verbose_name=_('name'))
+    name = models.CharField(max_length=256, blank=True, verbose_name=_('name'))
 
     description_text = models.CharField(max_length=512,
                                         default='',
@@ -450,6 +471,12 @@ class Condition(models.Model):
             return
 
         # Case 2: Condition is NOT a filter
+        # Get the filter formula from the action if it exists
+        if not filter_formula:
+            filter_obj = self.action.conditions.filter(is_filter=True).first()
+            if filter_obj:
+                filter_formula = filter_obj.formula
+
         formula = self.formula
         if filter_formula:
             # There is a formula to add to the condition, create a conjunction
@@ -464,10 +491,18 @@ class Condition(models.Model):
 
         return
 
+    def get_formula_text(self):
+        """
+        Return the content of the formula in a string that is human readable
+        :return: String
+        """
+
+        return evaluate(self.formula, NodeEvaluation.EVAL_TXT)
+
     def __str__(self):
         return self.name
 
-    class Meta:
+    class Meta(object):
         """
         The unique criteria here is within the action, the name and being a
         filter. We may choose to name a filter and a condition with the same

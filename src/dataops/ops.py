@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
 
+
+from builtins import zip
 import numpy as np
 import pandas as pd
 from django.conf import settings
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import ugettext_lazy as _, gettext
 
 from action.models import Condition, Action
 from dataops import formula_evaluation
@@ -16,35 +17,23 @@ from dataops.pandas_db import (
     load_table,
     get_table_data,
     is_table_in_db,
-    get_table_queryset,
-    pandas_datatype_names)
+    pandas_datatype_names,
+    is_unique_column,
+    are_unique_columns,
+    has_unique_column)
 from table.models import View
 from workflow.models import Workflow, Column
-
-
-def is_unique_column(df_column):
-    """
-
-    :param df_column: Column of a pandas data frame
-    :return: Boolean encoding if the column has unique values
-    """
-    return len(df_column.dropna().unique()) == len(df_column)
-
-
-def are_unique_columns(data_frame):
-    """
-
-    :param data_frame: Pandas data frame
-    :return: Array of Booleans stating of a column has unique values
-    """
-    return [is_unique_column(data_frame[x]) for x in list(data_frame.columns)]
 
 
 def load_upload_from_db(pk):
     return load_table(create_upload_table_name(pk))
 
 
-def store_table_in_db(data_frame, pk, table_name, temporary=False):
+def store_table_in_db(data_frame,
+                      pk,
+                      table_name,
+                      temporary=False,
+                      reset_keys=True):
     """
     Update or create a table in the DB with the data in the data frame. It
     also updates the corresponding column information
@@ -54,6 +43,8 @@ def store_table_in_db(data_frame, pk, table_name, temporary=False):
     :param table_name: Table to use in the DB
     :param temporary: Boolean stating if the table is temporary,
            or it belongs to an existing workflow.
+    :param reset_keys: Reset the value of the field is_key computing it from
+           scratch
     :return: If temporary = True, then return a list with three lists:
              - column names
              - column types
@@ -87,30 +78,41 @@ def store_table_in_db(data_frame, pk, table_name, temporary=False):
 
     # Get the workflow and its columns
     workflow = Workflow.objects.get(id=pk)
-    wf_col_names = Column.objects.filter(
-        workflow__id=pk
-    ).values_list("name", flat=True)
+    wf_cols = workflow.columns.all()
 
-    # Loop over the columns in the data frame and reconcile the column info
-    # with the column objects attached to the WF
+    # Loop over the columns in the Workflow to refresh the is_key value. There
+    # may be values that have been added to the column, so this field needs to
+    # be reassessed
+    for col in wf_cols:
+        if reset_keys:
+            new_val = is_unique_column(data_frame[col.name])
+            if col.is_key and not new_val:
+                # Only set the is_key value if the column states that it is a
+                # key column, but the values say no. Othe other way around
+                # is_key is false in the column will be ignored as it may have
+                # been set by the user
+                col.is_key = new_val
+                col.save()
+
+        # Remove this column name from wf_col_names, no further processing is
+        # needed.
+        df_column_names.remove(col.name)
+
+    # Loop over the remaining columns in the data frame and create the new
+    # column objects in the workflow
     for cname in df_column_names:
-        # See if this is a new column
-        if cname in wf_col_names:
-            # If column already exists in wf_col_names, no need to do anything
-            continue
-
         # Create the new column
         column = Column(
             name=cname,
             workflow=workflow,
             data_type=pandas_datatype_names[data_frame[cname].dtype.name],
             is_key=is_unique_column(data_frame[cname]),
-            position=Column.objects.filter(workflow=workflow).count() + 1,
+            position=workflow.columns.count() + 1
         )
         column.save()
 
-    # Get now the new set of columns with names
-    wf_columns = Column.objects.filter(workflow__id=pk)
+    # Get the new set of columns with names
+    wf_columns = workflow.columns.all()
 
     # Reorder the columns in the data frame
     data_frame = data_frame[[x.name for x in wf_columns]]
@@ -137,16 +139,20 @@ def store_table_in_db(data_frame, pk, table_name, temporary=False):
     return None
 
 
-def store_dataframe_in_db(data_frame, pk):
+def store_dataframe_in_db(data_frame, pk, reset_keys=True):
     """
     Given a dataframe and the primary key of a workflow, it dumps its content on
     a table that is rewritten every time.
 
     :param data_frame: Pandas data frame containing the data
     :param pk: The unique key for the workflow
+    :param reset_keys: Reset the field is_key computing its value from scratch
     :return: Nothing. Side effect in the database
     """
-    return store_table_in_db(data_frame, pk, create_table_name(pk))
+    return store_table_in_db(data_frame,
+                             pk,
+                             create_table_name(pk),
+                             reset_keys=reset_keys)
 
 
 def store_upload_dataframe_in_db(data_frame, pk):
@@ -181,13 +187,13 @@ def get_table_row_by_index(workflow, cond_filter, idx):
     """
 
     # Get the data
-    data = get_table_data(workflow.id, cond_filter)
+    data = get_table_data(workflow.id, cond_filter, workflow.get_column_names())
 
     # If the data is not there, return None
     if idx > len(data):
         return None
 
-    return dict(zip(workflow.get_column_names(), data[idx - 1]))
+    return dict(list(zip(workflow.get_column_names(), data[idx - 1])))
 
 
 def workflow_has_table(workflow_item):
@@ -202,14 +208,6 @@ def workflow_has_upload_table(workflow_item):
     return is_table_in_db(
         create_upload_table_name(workflow_item.id)
     )
-
-
-def get_queryset_by_workflow(workflow_item):
-    return get_table_queryset(create_table_name(workflow_item.id))
-
-
-def get_queryset_by_workflow_id(workflow_id):
-    return get_table_queryset(create_table_name(workflow_id))
 
 
 def perform_overlap_update(dst_df, src_df, dst_key, src_key, how_merge):
@@ -260,13 +258,13 @@ def perform_overlap_update(dst_df, src_df, dst_key, src_key, how_merge):
     if len(src_df.columns) <= 1:
         return dst_df
 
-    dst_df_tmp1 = dst_df.set_index(dst_key)
-    src_df_tmp1 = src_df.set_index(src_key)
+    dst_df_tmp1 = dst_df.set_index(dst_key, drop=False)
+    src_df_tmp1 = src_df.set_index(src_key, drop=False)
     if how_merge == 'inner':
         # Subset of dst_df_tmp1 with the keys in both DFs
         result = dst_df_tmp1.loc[
             dst_df_tmp1.index.intersection(src_df_tmp1.index)
-        ]
+        ].copy()
         # Update the subset with the values in the right
         result.update(src_df_tmp1)
     elif how_merge == 'outer':
@@ -274,11 +272,13 @@ def perform_overlap_update(dst_df, src_df, dst_key, src_key, how_merge):
         result = dst_df_tmp1
         result.update(src_df_tmp1)
         # Append the missing rows
-        tmp1 = src_df_tmp1.loc[src_df_tmp1.index.difference(dst_df_tmp1.index)]
+        tmp1 = src_df_tmp1.loc[
+            src_df_tmp1.index.difference(dst_df_tmp1.index)
+        ].copy()
         if not tmp1.empty:
             # Append only if the tmp1 data frame is not empty (otherwise it
             # looses the name of the index column
-            result = result.append(tmp1)
+            result = result.append(tmp1, sort=True)
     elif how_merge == 'left':
         result = dst_df_tmp1
         result.update(src_df_tmp1)
@@ -287,20 +287,22 @@ def perform_overlap_update(dst_df, src_df, dst_key, src_key, how_merge):
         # Subset of dst_df_tmp1 with the keys in both DFs
         result = dst_df_tmp1.loc[
             dst_df_tmp1.index.intersection(src_df_tmp1.index)
-        ]
+        ].copy()
         # Update with the right DF
         result.update(src_df_tmp1)
         # Append the rows that are in right and not in left
-        tmp2 = src_df_tmp1.loc[src_df_tmp1.index.difference(dst_df_tmp1.index)]
+        tmp2 = src_df_tmp1.loc[
+            src_df_tmp1.index.difference(dst_df_tmp1.index)
+        ].copy()
         if not tmp2.empty:
             # Append only if it is not empty
-            result = result.append(tmp2)
+            result = result.append(tmp2, sort=True)
 
     # Return result
-    return result.reset_index()
+    return result.reset_index(drop=True)
 
 
-def perform_dataframe_upload_merge(pk, dst_df, src_df, merge_info):
+def perform_dataframe_upload_merge(workflow, dst_df, src_df, merge_info):
     """
     It either stores a data frame in the db (dst_df is None), or combines
     the two data frames dst_df and src_df and stores its content.
@@ -336,7 +338,7 @@ def perform_dataframe_upload_merge(pk, dst_df, src_df, merge_info):
     STEP B: The data frame dst_df_tmp1 is then updated with the values in
     src_df[OVERLAP].
 
-    :param pk: Primary key of the Workflow containing the data frames
+    :param workflow: Worlflow with the data frame
     :param dst_df: Destination dataframe (already stored in DB)
     :param src_df: Source dataframe, stored in temporary table
     :param merge_info: Dictionary with merge options
@@ -353,8 +355,8 @@ def perform_dataframe_upload_merge(pk, dst_df, src_df, merge_info):
 
     # STEP 1 Rename the column names.
     src_df = src_df.rename(
-        columns=dict(zip(merge_info['initial_column_names'],
-                         merge_info['rename_column_names'])))
+        columns=dict(list(zip(merge_info['initial_column_names'],
+                          merge_info['rename_column_names']))))
 
     # STEP 2 Drop the columns not selected
     columns_to_upload = merge_info['columns_to_upload']
@@ -371,9 +373,8 @@ def perform_dataframe_upload_merge(pk, dst_df, src_df, merge_info):
 
     # If no dst_df is given, simply dump the frame in the DB
     if dst_df is None:
-        store_dataframe_in_db(src_df, pk)
+        store_dataframe_in_db(src_df, workflow.id)
         # Reconcile the label is_key with the one in the merge_info
-        workflow = Workflow.objects.get(pk=pk)
         for cname, uploaded, is_key in zip(merge_info['rename_column_names'],
                                            merge_info['columns_to_upload'],
                                            merge_info['keep_key_column']):
@@ -409,7 +410,7 @@ def perform_dataframe_upload_merge(pk, dst_df, src_df, merge_info):
                               left_on=dst_key,
                               right_on=src_key)
         except Exception as e:
-            return _('Merge operation failed. Exception: ') + e.message
+            return gettext('Merge operation failed. Exception: ') + str(e)
 
         # VERY special case: The key used for the merge in src_df can have an
         # identical column in dst_df, but it is not the one used for the
@@ -434,12 +435,19 @@ def perform_dataframe_upload_merge(pk, dst_df, src_df, merge_info):
     # If the merge produced a data frame with no rows, flag it as an error to
     # prevent loosing data when there is a mistake in the key column
     if new_df.shape[0] == 0:
-        return _('Merge operation produced a result with no rows')
+        return gettext('Merge operation produced a result with no rows')
+
+    # If the merge produced a data frame with no unique columns, flag it as an
+    # error to prevent the data frame from propagating without a key column
+    if not has_unique_column(new_df):
+        return gettext(
+            'Merge operation produced a result without any key columns. '
+            'Review the key columns in the data to upload.'
+        )
 
     # For each column check that the new column is consistent with data_type,
     # and allowed values, and recheck its unique key status
-    workflow = Workflow.objects.get(pk=pk)
-    for col in Workflow.objects.get(pk=pk).columns.all():
+    for col in workflow.columns.all():
         # New values in this column should be compatible with the current
         # column properties.
         # Condition 1: Data type is correct (there is an exception for columns
@@ -448,58 +456,58 @@ def perform_dataframe_upload_merge(pk, dst_df, src_df, merge_info):
         df_col_type = pandas_datatype_names[new_df[col.name].dtype.name]
         if col.data_type == 'boolean' and df_col_type == 'string':
             column_data_types = set([type(x) for x in new_df[col.name]])
-            # Remove the NaN type
-            column_data_types.remove(float)
+            # Remove the NoneType and Float
+            column_data_types.discard(type(None))
+            column_data_types.discard(float)
             if len(column_data_types) != 1 or column_data_types.pop() != bool:
-                return _('New values in column {0} are not of type {1}').format(
-                    col.name,
-                    col.data_type
-                )
+                return gettext(
+                    'New values in column {0} are not of type {1}'
+                ).format(col.name, col.data_type)
         elif col.data_type == 'integer' and df_col_type != 'integer' and \
                 df_col_type != 'double':
             # Numeric column results in a non-numeric column
-            return _('New values in column {0} are not of type number').format(
-                col.name
-            )
+            return gettext(
+                'New values in column {0} are not of type number'
+            ).format(col.name)
         elif col.data_type != 'integer' and df_col_type != col.data_type:
             # Any other type change
-            return _('New values in column {0} are not of type {1}').format(
-                col.name,
-                col.data_type
-            )
+            return gettext(
+                'New values in column {0} are not of type {1}'
+            ).format(col.name, col.data_type)
 
         # Condition 2: If there are categories, the new values should be
         # compatible with them.
         if col.categories and not all([x in col.categories
                                        for x in new_df[col.name]
                                        if x and not pd.isnull(x)]):
-            return \
-                _('New values in column {0} are not in categories {1}').format(
-                    col.name,
-                    ', '.join(col.categories)
-                )
+            return gettext(
+                'New values in column {0} are not in categories {1}'
+            ).format(col.name, ', '.join(col.categories))
 
     # Store the result back in the DB
-    store_dataframe_in_db(new_df, pk)
+    store_dataframe_in_db(new_df, workflow.id)
 
-    # Update the value of the "keey_key_column"
+    # Update the value of is_key based on "keep_key_column"
     for to_upload, cname, keep_key in zip(merge_info['columns_to_upload'],
                                           merge_info['rename_column_names'],
                                           merge_info['keep_key_column']):
         if not to_upload:
+            # Column is not uploaded, nothing to process
             continue
 
-        col = workflow.columns.get(name=cname)
-        # Condition 3: Process the is_key property.
-        is_key_now = is_unique_column(new_df[col.name]) and keep_key
-        if col.is_key and not is_key_now:
-            return _('Column {0} is no longer a key column.').format(col.name)
+        col = workflow.columns.filter(name=cname).first()
+        if not col:
+            # It is a new column so no need to update the value of col_key
+            continue
 
-        col.is_key = is_key_now
+        # Process the is_key property. The is_key property has been
+        # recalculated during the store, now it needs to be updated looking at
+        # the keep_key value.
+        col.is_key = col.is_key and keep_key
         col.save()
 
     # Recompute all the values of the conditions in each of the actions
-    for action in Workflow.objects.get(pk=pk).actions.all():
+    for action in workflow.actions.all():
         action.update_n_rows_selected()
 
     # Operation was correct, no need to flag anything
@@ -508,6 +516,9 @@ def perform_dataframe_upload_merge(pk, dst_df, src_df, merge_info):
 
 def data_frame_add_column(df, column, initial_value):
     """
+    Function that add a new column to the data frame with the structure to match
+    the given column. If the initial value is not give, it is decided based
+    on the data type stored in the column object.
 
     :param df: Data frame to modify
     :param column: Column object to add
@@ -527,7 +538,7 @@ def data_frame_add_column(df, column, initial_value):
     if initial_value is None:
         # Choose the right numpy type
         if column_type == 'string':
-            initial_value = ''
+            initial_value = None
         elif column_type == 'integer':
             initial_value = np.nan
         elif column_type == 'double':
@@ -545,11 +556,10 @@ def data_frame_add_column(df, column, initial_value):
     return df
 
 
-def rename_df_column(df, workflow, old_name, new_name):
+def rename_df_column(workflow, old_name, new_name):
     """
     Function to change the name of a column in the dataframe.
 
-    :param df: dataframe
     :param workflow: workflow object that is handling the data frame
     :param old_name: old column name
     :param new_name: new column name
@@ -575,8 +585,6 @@ def rename_df_column(df, workflow, old_name, new_name):
             new_name
         )
         view.save()
-
-    return df.rename(columns={old_name: new_name})
 
 
 def detect_datetime_columns(data_frame):

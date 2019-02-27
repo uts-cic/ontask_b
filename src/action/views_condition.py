@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
 
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
@@ -8,11 +7,18 @@ from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, reverse
 from django.template.loader import render_to_string
+from django.utils.html import escape
 from django.utils.translation import ugettext_lazy as _
 from django.views import generic
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 from action import ops
-from dataops.formula_evaluation import evaluate_node_sql, get_variables
+from dataops.formula_evaluation import (
+    get_variables,
+    evaluate,
+    NodeEvaluation
+)
 from logs.models import Log
 from ontask.permissions import is_instructor, UserIsInstructor
 from workflow.ops import get_workflow
@@ -100,7 +106,7 @@ def save_condition_form(request,
         if not workflow:
             # Workflow is not accessible. Go back to the index.
             data['form_is_valid'] = True
-            data['html_redirect'] = reverse('workflow:index')
+            data['html_redirect'] = reverse('home')
             return JsonResponse(data)
 
         # New condition name does not collide with column name
@@ -119,7 +125,7 @@ def save_condition_form(request,
             return JsonResponse(data)
 
         # New condition name does not collide with attribute names
-        if form.cleaned_data['name'] in workflow.attributes.keys():
+        if form.cleaned_data['name'] in list(workflow.attributes.keys()):
             form.add_error(
                 'name',
                 _('The workflow has an attribute with this name.')
@@ -140,8 +146,8 @@ def save_condition_form(request,
             # TODO: Review!
             replacing = '{{% if {0} %}}'
             action.content = action.content.replace(
-                replacing.format(form.old_name),
-                replacing.format(condition.name))
+                escape(replacing.format(form.old_name)),
+                escape(replacing.format(condition.name)))
             action.save()
 
     # Ok, here we can say that the data in the form is correct.
@@ -171,7 +177,7 @@ def save_condition_form(request,
     condition.save()
 
     # Log the event
-    formula, _ = evaluate_node_sql(condition.formula)
+    formula, _ = evaluate(condition.formula, NodeEvaluation.EVAL_SQL)
     if is_new:
         if is_filter:
             log_type = Log.FILTER_CREATE
@@ -217,7 +223,7 @@ class FilterCreateView(UserIsInstructor, generic.TemplateView):
                 Q(workflow__shared=request.user)
             ).distinct().get(pk=kwargs['pk'])
         except (KeyError, ObjectDoesNotExist):
-            return redirect('workflow:index')
+            return redirect('home')
 
         form = self.form_class()
         return save_condition_form(request,
@@ -236,7 +242,7 @@ class FilterCreateView(UserIsInstructor, generic.TemplateView):
                 Q(workflow__shared=request.user)
             ).distinct().get(pk=kwargs['pk'])
         except (KeyError, ObjectDoesNotExist):
-            return redirect('workflow:index')
+            return redirect('home')
 
         form = self.form_class(request.POST)
         return save_condition_form(request,
@@ -263,7 +269,7 @@ def edit_filter(request, pk):
             is_filter=True
         ).distinct().get(pk=pk)
     except (KeyError, ObjectDoesNotExist):
-        return redirect('workflow:index')
+        return redirect('home')
 
     # Create the filter and populate with existing data
     form = FilterForm(request.POST or None, instance=cond_filter)
@@ -293,7 +299,7 @@ def delete_filter(request, pk):
             is_filter=True
         ).distinct().get(pk=pk)
     except (KeyError, ObjectDoesNotExist):
-        return redirect('workflow:index')
+        return redirect('home')
 
     data = dict()
     data['form_is_valid'] = False
@@ -308,7 +314,7 @@ def delete_filter(request, pk):
             cond_filter.action.save()
 
         # Log the event
-        formula, fields = evaluate_node_sql(cond_filter.formula)
+        formula, fields = evaluate(cond_filter.formula, NodeEvaluation.EVAL_SQL)
         Log.objects.register(request.user,
                              Log.FILTER_DELETE,
                              cond_filter.action.workflow,
@@ -358,7 +364,7 @@ class ConditionCreateView(UserIsInstructor, generic.TemplateView):
                 Q(workflow__shared=request.user)
             ).distinct().get(pk=kwargs['pk'])
         except (KeyError, ObjectDoesNotExist):
-            return redirect('workflow:index')
+            return redirect('home')
 
         form = self.form_class()
         return save_condition_form(request,
@@ -377,7 +383,7 @@ class ConditionCreateView(UserIsInstructor, generic.TemplateView):
                 Q(workflow__shared=request.user)
             ).distinct().get(pk=kwargs['pk'])
         except (KeyError, ObjectDoesNotExist):
-            return redirect('workflow:index')
+            return redirect('home')
 
         form = self.form_class(request.POST)
 
@@ -406,7 +412,7 @@ def edit_condition(request, pk):
         ).distinct().get(pk=pk)
     except (KeyError, ObjectDoesNotExist):
         return JsonResponse({'form_is_valid': True,
-                             'html_redirect': reverse('workflow:index')})
+                             'html_redirect': reverse('home')})
 
     form = ConditionForm(request.POST or None, instance=condition)
 
@@ -438,7 +444,7 @@ def delete_condition(request, pk):
         ).distinct().get(pk=pk)
     except (KeyError, ObjectDoesNotExist):
         data['form_is_valid'] = True
-        data['html_redirect'] = reverse('workflow:index')
+        data['html_redirect'] = reverse('home')
         return JsonResponse(data)
 
     data = {'form_is_valid': False}
@@ -451,7 +457,7 @@ def delete_condition(request, pk):
             condition.action.set_content(action_content)
             condition.action.save()
 
-        formula, fields = evaluate_node_sql(condition.formula)
+        formula, fields = evaluate(condition.formula, NodeEvaluation.EVAL_SQL)
         Log.objects.register(request.user,
                              Log.CONDITION_DELETE,
                              condition.action.workflow,
@@ -463,8 +469,7 @@ def delete_condition(request, pk):
         # Perform the delete operation
         condition.delete()
         data['form_is_valid'] = True
-        data['html_redirect'] = reverse('action:edit',
-                                        kwargs={'pk': condition.action.id})
+        data['html_redirect'] = ''
         return JsonResponse(data)
 
     data['html_form'] = \
@@ -476,30 +481,43 @@ def delete_condition(request, pk):
 
 
 @user_passes_test(is_instructor)
+@csrf_exempt
+@require_http_methods(['POST'])
 def clone(request, pk):
     """
-    View to clone an action
+    JSON request to clone a condition. The post request must come with the
+    action_content
     :param request: Request object
     :param pk: id of the condition to clone
-    :return:
+    :return: JSON response
     """
 
+    # Check if the workflow is locked
+    workflow = get_workflow(request)
+    if not workflow:
+        return JsonResponse({'html_redirect': reverse('home')})
+
     # Get the condition
-    try:
-        condition = Condition.objects.filter(
-            Q(action__workflow__user=request.user) |
-            Q(action__workflow__shared=request.user),
-            is_filter=False
-        ).distinct().get(pk=pk)
-    except (KeyError, ObjectDoesNotExist):
+    condition = Condition.objects.filter(pk=pk).filter(
+        Q(action__workflow__user=request.user) |
+        Q(action__workflow__shared=request.user),
+        is_filter=False
+    ).first()
+
+    if not condition:
         messages.error(request,
                        _('Condition cannot be cloned.'))
-        return redirect(reverse('action:index'))
+        return JsonResponse({'html_redirect': reverse('action:index')})
+
+    # If the request has the 'action_content', update the action
+    action_content = request.POST.get('action_content', None)
+    if action_content:
+        condition.action.set_content(action_content)
+        condition.action.save()
 
     # Get the new name appending as many times as needed the 'Copy of '
     new_name = 'Copy of ' + condition.name
-    while Condition.objects.filter(name=new_name,
-                                   action=condition.action).exists():
+    while condition.action.conditions.filter(name=new_name).exists():
         new_name = 'Copy of ' + new_name
 
     old_id = condition.id
@@ -517,7 +535,7 @@ def clone(request, pk):
                           'name_old': old_name,
                           'name_new': condition.name})
 
-    messages.success(request,
-                     _('Action successfully cloned.'))
-    return redirect(reverse('action:edit',
-                            kwargs={'pk': condition.action.id}))
+    messages.success(request, _('Action successfully cloned.'))
+
+    # Refresh the page to show the column in the list.
+    return JsonResponse({'html_redirect': ''})

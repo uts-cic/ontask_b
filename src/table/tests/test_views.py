@@ -4,17 +4,17 @@ from __future__ import unicode_literals, print_function
 import os
 
 from django.conf import settings
-from django.shortcuts import reverse
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.common.action_chains import ActionChains
 
 import test
 from dataops import pandas_db
 from workflow.models import Workflow
 
 
-class TableDerivedColumns(test.OntaskLiveTestCase):
+class TableDerivedColumns(test.OnTaskLiveTestCase):
     fixtures = ['derived_column']
     filename = os.path.join(
         settings.BASE_DIR(),
@@ -39,8 +39,11 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
         # Login
         self.login('instructor01@bogus.com')
 
-        # GO TO THE WORKFLOW PAGE
+        # Open workflow
         self.access_workflow_from_home_page(self.wflow_name)
+
+        # Go to table page
+        self.go_to_table()
 
         # Click in the add derived column button
         self.open_add_derived_column()
@@ -66,10 +69,10 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
             "(//input[@name='columns'])[3]"
         ).click()
         self.selenium.find_element_by_css_selector(
-            "div.modal-footer > button.btn.btn-primary"
+            "div.modal-footer > button.btn.btn-outline-primary"
         ).click()
         # MODAL WAITING
-        self.wait_close_modal_refresh_table('column-table_previous')
+        self.wait_close_modal_refresh_table('table-data_previous')
 
         # Click in the add derived column button
         self.open_add_derived_column()
@@ -95,10 +98,10 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
             "(//input[@name='columns'])[5]"
         ).click()
         self.selenium.find_element_by_css_selector(
-            "div.modal-footer > button.btn.btn-primary"
+            "div.modal-footer > button.btn.btn-outline-primary"
         ).click()
         # MODAL WAITING
-        self.wait_close_modal_refresh_table('column-table_previous')
+        self.wait_close_modal_refresh_table('table-data_previous')
 
         # Click in the add derived column button
         self.open_add_derived_column()
@@ -121,10 +124,10 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
             "(//input[@name='columns'])[7]"
         ).click()
         self.selenium.find_element_by_css_selector(
-            "div.modal-footer > button.btn.btn-primary"
+            "div.modal-footer > button.btn.btn-outline-primary"
         ).click()
         # MODAL WAITING
-        self.wait_close_modal_refresh_table('column-table_previous')
+        self.wait_close_modal_refresh_table('table-data_previous')
 
         # Click in the add derived column button
         self.open_add_derived_column()
@@ -147,10 +150,10 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
             "(//input[@name='columns'])[9]"
         ).click()
         self.selenium.find_element_by_css_selector(
-            "div.modal-footer > button.btn.btn-primary"
+            "div.modal-footer > button.btn.btn-outline-primary"
         ).click()
         # MODAL WAITING
-        self.wait_close_modal_refresh_table('column-table_previous')
+        self.wait_close_modal_refresh_table('table-data_previous')
 
         # Click in the add derived column button
         self.open_add_derived_column()
@@ -176,10 +179,10 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
             "(//input[@name='columns'])[3]"
         ).click()
         self.selenium.find_element_by_css_selector(
-            "div.modal-footer > button.btn.btn-primary"
+            "div.modal-footer > button.btn.btn-outline-primary"
         ).click()
         # MODAL WAITING
-        self.wait_close_modal_refresh_table('column-table_previous')
+        self.wait_close_modal_refresh_table('table-data_previous')
 
         # Click in the add derived column button
         self.open_add_derived_column()
@@ -205,10 +208,10 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
             "(//input[@name='columns'])[5]"
         ).click()
         self.selenium.find_element_by_css_selector(
-            "div.modal-footer > button.btn.btn-primary"
+            "div.modal-footer > button.btn.btn-outline-primary"
         ).click()
         # MODAL WAITING
-        self.wait_close_modal_refresh_table('column-table_previous')
+        self.wait_close_modal_refresh_table('table-data_previous')
 
         # Click in the add derived column button
         self.open_add_derived_column()
@@ -233,10 +236,10 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
             "(//input[@name='columns'])[7]"
         ).click()
         self.selenium.find_element_by_css_selector(
-            "div.modal-footer > button.btn.btn-primary"
+            "div.modal-footer > button.btn.btn-outline-primary"
         ).click()
         # MODAL WAITING
-        self.wait_close_modal_refresh_table('column-table_previous')
+        self.wait_close_modal_refresh_table('table-data_previous')
 
         # Click in the add derived column button
         self.open_add_derived_column()
@@ -266,10 +269,10 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
             "(//input[@name='columns'])[12]"
         ).click()
         self.selenium.find_element_by_css_selector(
-            "div.modal-footer > button.btn.btn-primary"
+            "div.modal-footer > button.btn.btn-outline-primary"
         ).click()
         # MODAL WAITING
-        self.wait_close_modal_refresh_table('column-table_previous')
+        self.wait_close_modal_refresh_table('table-data_previous')
 
         # Click in the add derived column button
         self.open_add_derived_column()
@@ -299,10 +302,10 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
             "(//input[@name='columns'])[12]"
         ).click()
         self.selenium.find_element_by_css_selector(
-            "div.modal-footer > button.btn.btn-primary"
+            "div.modal-footer > button.btn.btn-outline-primary"
         ).click()
         # MODAL WAITING
-        self.wait_close_modal_refresh_table('column-table_previous')
+        self.wait_close_modal_refresh_table('table-data_previous')
 
         # Check that the data is correct
         df = pandas_db.load_from_db(Workflow.objects.all()[0].id)
@@ -331,7 +334,7 @@ class TableDerivedColumns(test.OntaskLiveTestCase):
         self.logout()
 
 
-class TableViews(test.OntaskLiveTestCase):
+class TableViews(test.OnTaskLiveTestCase):
     fixtures = ['derived_column']
     filename = os.path.join(
         settings.BASE_DIR(),
@@ -404,8 +407,10 @@ class TableViews(test.OntaskLiveTestCase):
         self.wait_close_modal_refresh_table('view-table_previous')
 
         # Click in the link to see the table resulting from this view
-        element = self.search_table_row_by_string('view-table', 1, 'v1')
-        element.find_element_by_link_text("Table").click()
+        self.selenium.find_element_by_xpath(
+            "//table[@id='view-table']"
+            "//td[1][normalize-space() = 'v1']/../td[3]/div/a"
+        ).click()
         # Wait for the table to be refreshed
         self.wait_for_datatable('table-data_previous')
 
@@ -463,8 +468,10 @@ class TableViews(test.OntaskLiveTestCase):
         self.wait_close_modal_refresh_table('view-table_previous')
 
         # Check the table resulting from the view
-        element = self.search_table_row_by_string('view-table', 1, 'v2')
-        element.find_element_by_link_text("Table").click()
+        self.selenium.find_element_by_xpath(
+            "//table[@id='view-table']"
+            "//td[1][normalize-space() = 'v2']/../td[3]/div/a"
+        ).click()
         # Wait for the table to be refreshed
         self.wait_for_datatable('table-data_previous')
 
@@ -479,7 +486,7 @@ class TableViews(test.OntaskLiveTestCase):
         WebDriverWait(self.selenium, 10).until(
             EC.text_to_be_present_in_element(
                 (By.XPATH, "//div[@id='table-content']/h1"),
-                'Table View'
+                'Table'
             )
         )
 
@@ -496,15 +503,10 @@ class TableViews(test.OntaskLiveTestCase):
         self.wait_for_datatable('view-table_previous')
 
         # Click in the clone link of the first view
-        element = self.search_table_row_by_string('view-table', 1, 'v1')
-        element.find_element_by_xpath(
-            "td//button[normalize-space()='Clone']"
+        self.selenium.find_element_by_xpath(
+            "//table[@id='view-table']//tr/td[1][normalize-space() = 'v1']/"
+            "../td[3]/div/button[1]"
         ).click()
-        # Wait for the modal to open
-        WebDriverWait(self.selenium, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, 'modal-open'))
-        )
-
         # Confirm view cloning
         self.selenium.find_element_by_xpath(
             "//div[@class='modal-footer']/button[normalize-space()='Clone "
@@ -513,10 +515,10 @@ class TableViews(test.OntaskLiveTestCase):
         self.wait_close_modal_refresh_table('view-table_previous')
 
         # Open the view with the clone
-        element = self.search_table_row_by_string('view-table',
-                                                  1,
-                                                  'Copy_of_v1')
-        element.find_element_by_link_text("Table").click()
+        self.selenium.find_element_by_xpath(
+            "//table[@id='view-table']"
+            "//td[1][normalize-space() = 'Copy_of_v1']/../td[3]/div/a"
+        ).click()
         # Wait for the table to be refreshed
         self.wait_for_datatable('table-data_previous')
 
@@ -529,7 +531,7 @@ class TableViews(test.OntaskLiveTestCase):
         self.logout()
 
 
-class TableInsertRow(test.OntaskLiveTestCase):
+class TableInsertRow(test.OnTaskLiveTestCase):
     fixtures = ['derived_column']
     filename = os.path.join(
         settings.BASE_DIR(),
@@ -560,7 +562,7 @@ class TableInsertRow(test.OntaskLiveTestCase):
         self.go_to_table()
 
         # Click on the add row button
-        self.selenium.find_element_by_link_text('Add row').click()
+        self.selenium.find_element_by_link_text('Row').click()
 
         # Fill out the fields in the form
         for x in range(0,10):
@@ -576,7 +578,7 @@ class TableInsertRow(test.OntaskLiveTestCase):
         c91.click()
         # Click on the Submit button
         self.selenium.find_element_by_xpath(
-            "//form/button[@type='submit']"
+            "//form//button[@type='submit']"
         ).click()
         WebDriverWait(self.selenium, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, 'alert-danger'))
@@ -594,7 +596,7 @@ class TableInsertRow(test.OntaskLiveTestCase):
         keyelem.send_keys('100')
         # Click on the Submit button
         self.selenium.find_element_by_xpath(
-            "//form/button[@type='submit']"
+            "//form//button[@type='submit']"
         ).click()
         self.wait_for_datatable('table-data_previous')
 
@@ -606,18 +608,13 @@ class TableInsertRow(test.OntaskLiveTestCase):
         )
 
         # Click in the Ops -> delete button -> Delete row
-        element = self.search_table_row_by_string('table-data', 2, '100')
-        element.find_element_by_xpath(
-            "td//button[normalize-space()='Operations']"
-        ).click()
-        element.find_element_by_xpath(
-            "td//button[normalize-space()='Delete']"
-        ).click()
-        WebDriverWait(self.selenium, 10).until(
-            EC.presence_of_element_located(
-                (By.CLASS_NAME, 'modal-open')
-            )
+        element = self.selenium.find_element_by_xpath(
+            "//table[@id='table-data']"
+            "//tr/td[2][normalize-space() = '100']/"
+            "../td[1]/div/button"
         )
+        ActionChains(self.selenium).move_to_element(element).click().perform()
+        self.wait_for_modal_open()
         self.selenium.find_element_by_xpath(
             "//div[@id='modal-item']//button[@type='submit']"
         ).click()

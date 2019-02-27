@@ -6,8 +6,6 @@ import sys
 
 from .base import *  # NOQA
 
-TEMPLATES[0]['OPTIONS'].update({'debug': True})
-
 ALLOWED_HOSTS = ['*']
 
 # Define STATIC_ROOT for the collectstatic command
@@ -19,8 +17,7 @@ if "celery" in sys.argv[0]:
     DEBUG = False
 
 # Django Debug Toolbar
-INSTALLED_APPS += (
-    'debug_toolbar',)
+INSTALLED_APPS += ['debug_toolbar']
 
 TESTING = len(sys.argv) > 1 and sys.argv[1] == 'test'
 if not TESTING:
@@ -39,8 +36,7 @@ if DEBUG:
     print('ONTASK_HELP_URL: ' + ONTASK_HELP_URL)
 
 # Additional middleware introduced by debug toolbar
-MIDDLEWARE_CLASSES += (
-    'debug_toolbar.middleware.DebugToolbarMiddleware',)
+MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware']
 
 # Show emails to console in DEBUG mode
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -93,10 +89,10 @@ LOGGING = {
             'filename': join(LOGFILE_ROOT, 'script.log'),
             'formatter': 'verbose'
         },
-        'scheduler_log_file': {
+        'celery_log_file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': join(LOGFILE_ROOT, 'scheduler.log'),
+            'filename': join(LOGFILE_ROOT, 'celery.log'),
             'formatter': 'verbose'
         },
         'console': {
@@ -120,16 +116,24 @@ LOGGING = {
             'propagate': True,
             'level': 'DEBUG',
         },
-        'scripts.scheduler': {
-            'handlers': ['scheduler_log_file'],
+        'celery_execution': {
+            'handlers': ['celery_log_file'],
             'propagate': True,
             'level': 'DEBUG',
         },
-	'django.security.DisallowedHost': {
+        'django.security.DisallowedHost': {
             'handlers': ['django_log_file'],
             'propagate': True,
             'level': 'DEBUG',
-        }
+        },
+        'django_auth_lti.backends': {
+            'handlers': ['proj_log_file'],
+            'level': 'DEBUG',
+        },
+        'django_auth_lti.middleware_patched': {
+            'handlers': ['proj_log_file'],
+            'level': 'DEBUG',
+        },
     }
 }
 

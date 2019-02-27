@@ -1,11 +1,16 @@
 $(function () {
-  // Column Add
   $("#table-content").on("click", ".js-workflow-column-add", loadForm);
+  // Column Add
   $("#modal-item").on("submit", ".js-workflow-column-add-form", saveForm);
 
   // Derived column add
   $("#table-content").on("click", ".js-workflow-formula-column-add", loadForm);
   $("#modal-item").on("submit", ".js-workflow-formula-column-add-form",
+  saveForm);
+
+  // Random column add
+  $("#table-content").on("click", ".js-workflow-random-column-add", loadForm);
+  $("#modal-item").on("submit", ".js-workflow-random-column-add-form",
   saveForm);
 
   // Column Edit
@@ -40,4 +45,11 @@ $(function () {
   // View clone
   $("#view-content").on("click", ".js-view-clone", loadForm);
   $("#modal-item").on("click", ".js-view-clone-form", saveForm);
+
+  // Flush workflow in detail view
+  $("#table-content").on("click", ".js-workflow-flush", loadForm);
+  $("#modal-item").on("submit", ".js-workflow-flush-form", saveForm);
 });
+window.onload = function(){
+  setDateTimePickers();
+};

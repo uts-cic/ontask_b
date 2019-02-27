@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
-
-from collections import Counter
 
 from django.contrib.auth.decorators import user_passes_test
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.translation import ugettext as _
 
-from dataops import ops, pandas_db
 from ontask.permissions import is_instructor
 from workflow.ops import get_workflow
 from .forms import UploadCSVFileForm
@@ -37,10 +33,12 @@ def csvupload1(request):
     # Get the current workflow
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     # Bind the form with the received data
-    form = UploadCSVFileForm(request.POST or None, request.FILES or None)
+    form = UploadCSVFileForm(request.POST or None,
+                             request.FILES or None,
+                             workflow_id=workflow.id)
 
     # Process the initial loading of the form
     if request.method != 'POST':
@@ -70,70 +68,12 @@ def csvupload1(request):
                        'dtype_select': _('CSV file'),
                        'prev_step': reverse('dataops:uploadmerge')})
 
-    # Process CSV file using pandas read_csv
-    try:
-        data_frame = pandas_db.load_df_from_csvfile(
-            request.FILES['file'],
-            form.cleaned_data['skip_lines_at_top'],
-            form.cleaned_data['skip_lines_at_bottom'])
-    except Exception as e:
-        form.add_error('file',
-                       _('File could not be processed ({0})').format(e.message))
-        return render(request,
-                      'dataops/upload1.html',
-                      {'form': form,
-                       'dtype': 'CSV',
-                       'dtype_select': 'CSV file',
-                       'prev_step': reverse('dataops:uploadmerge')})
-
-    # If the frame has repeated column names, it will not be processed.
-    if len(set(data_frame.columns)) != len(data_frame.columns):
-        dup = [x for x, v in Counter(list(data_frame.columns)) if v > 1]
-        form.add_error(
-            'file',
-            _('The file has duplicated column names') + ' (' +
-            ','.join(dup) + ').')
-        return render(request, 'dataops/upload1.html',
-                      {'form': form,
-                       'dtype': 'CSV',
-                       'dtype_select': 'CSV file',
-                       'prev_step': reverse('dataops:uploadmerge')})
-
-    # If the data frame does not have any unique key, it is not useful (no
-    # way to uniquely identify rows). There must be at least one.
-    src_is_key_column = ops.are_unique_columns(data_frame)
-    if not any(src_is_key_column):
-        form.add_error(
-            'file',
-            _('The data has no column with unique values per row. '
-              'At least one column must have unique values.'))
-        return render(request, 'dataops/upload1.html',
-                      {'form': form,
-                       'dtype': 'CSV',
-                       'dtype_select': 'CSV file',
-                       'prev_step': reverse('dataops:uploadmerge')})
-
-    # Store the data frame in the DB.
-    try:
-        # Get frame info with three lists: names, types and is_key
-        frame_info = ops.store_upload_dataframe_in_db(data_frame, workflow.id)
-    except Exception as e:
-        form.add_error(
-            'file',
-            _('Sorry. This file cannot be processed.')
-        )
-        return render(request, 'dataops/upload1.html',
-                      {'form': form,
-                       'dtype': 'CSV',
-                       'dtype_select': 'CSV file',
-                       'prev_step': reverse('dataops:uploadmerge')})
-
     # Dictionary to populate gradually throughout the sequence of steps. It
     # is stored in the session.
     request.session['upload_data'] = {
-        'initial_column_names': frame_info[0],
-        'column_types': frame_info[1],
-        'src_is_key_column': frame_info[2],
+        'initial_column_names': form.frame_info[0],
+        'column_types': form.frame_info[1],
+        'src_is_key_column': form.frame_info[2],
         'step_1': reverse('dataops:csvupload1')
     }
 

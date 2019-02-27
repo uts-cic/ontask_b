@@ -1,6 +1,6 @@
 $(function () {
-  $('#checkAll').click(function () {
-       $('input:checkbox').prop('checked', this.checked);
+  $("#checkAll").click(function () {
+       $("input[id*='id_select_']").prop("checked", this.checked);
   });
 
   // Create Workflow
@@ -8,19 +8,31 @@ $(function () {
   $("#modal-item").on("submit", ".js-workflow-create-form", saveForm);
 
   // Delete Workflow
-  $("#workflow-area").on("click", ".js-workflow-delete", loadForm);
+  $("#workflow-index, #workflow-detail").on(
+    "click",
+    ".js-workflow-delete",
+    loadForm);
   $("#modal-item").on("submit", ".js-workflow-delete-form", saveForm);
 
   // Update Workflow
-  $("#workflow-area").on("click", ".js-workflow-update", loadForm);
+  $("#workflow-index, #workflow-detail").on(
+    "click",
+    ".js-workflow-update",
+    loadForm);
   $("#modal-item").on("submit", ".js-workflow-update-form", saveForm);
 
   // Clone workflow
-  $("#workflow-area").on("click", ".js-workflow-clone", loadForm);
+  $("#workflow-index, #workflow-detail").on(
+    "click",
+    ".js-workflow-clone",
+    loadForm);
   $("#modal-item").on("submit", ".js-workflow-clone-form", saveForm);
 
   // Flush workflow in detail view
-  $("#workflow-area").on("click", ".js-workflow-flush", loadForm);
+  $("#workflow-index, #workflow-detail").on(
+    "click",
+    ".js-workflow-flush",
+    loadForm);
   $("#modal-item").on("submit", ".js-workflow-flush-form", saveForm);
 
   // Add/Edit attribute
@@ -41,16 +53,16 @@ $(function () {
   $("#modal-item").on("submit", ".js-share-delete-form", saveForm);
 
   // Column Add
-  $("#workflow-area").on("click", ".js-workflow-column-add", loadForm);
+  $("#workflow-detail").on("click", ".js-workflow-column-add", loadForm);
   $("#modal-item").on("submit", ".js-workflow-column-add-form", saveForm);
 
   // Derived column add
-  $("#workflow-area").on("click", ".js-workflow-formula-column-add", loadForm);
+  $("#workflow-index").on("click", ".js-workflow-formula-column-add", loadForm);
   $("#modal-item").on("submit", ".js-workflow-formula-column-add-form",
   saveForm);
 
   // Random column add
-  $("#workflow-area").on("click", ".js-workflow-random-column-add", loadForm);
+  $("#workflow-index").on("click", ".js-workflow-random-column-add", loadForm);
   $("#modal-item").on("submit", ".js-workflow-random-column-add-form",
   saveForm);
 
@@ -69,5 +81,30 @@ $(function () {
   // Restrict column
   $("#column-table").on("click", ".js-column-restrict", loadForm);
   $("#modal-item").on("submit", ".js-column-restrict-form", saveForm);
-});
 
+  $(".card").hover(function(){
+    $(this).css("background-color", "lightgray");
+  }, function(){
+    $(this).css("background-color", "white");
+  });
+});
+window.onload = function(){
+  setDateTimePickers();
+};
+$(".ontask-card .card-body, .ontask-card .card-header").click(function() {
+  window.location = $(this).parent().find("a").attr("href");
+  $('#div-spinner').show();
+  return false;
+});
+$(document).ready(function() {
+  if (location.hash) {
+    $("a[href='" + location.hash + "']").tab("show");
+  }
+  $(document.body).on("click", "a[data-toggle]", function(event) {
+    location.hash = this.getAttribute("href");
+  });
+});
+$(window).on("popstate", function() {
+  var anchor = location.hash || $("a[data-toggle='tab']").first().attr("href");
+  $("a[href='" + anchor + "']").tab("show");
+});

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
+
 
 import os
 
@@ -36,7 +36,7 @@ class Scenario3Captures(ScreenTests):
         # Open Import page
         self.selenium.find_element_by_link_text('Import workflow').click()
         WebDriverWait(self.selenium, 10).until(
-            EC.text_to_be_present_in_element((By.CLASS_NAME, 'page-header'),
+            EC.text_to_be_present_in_element((By.XPATH, "//body/div/h1"),
                                              'Import workflow')
         )
 
@@ -59,13 +59,10 @@ class Scenario3Captures(ScreenTests):
         self.selenium.find_element_by_xpath(
             "//form/div/button[@type='Submit']"
         ).click()
-        self.wait_for_datatable('workflow-table_previous')
+        self.wait_for_page(element_id='workflow-index')
 
         # Select the workflow
         self.access_workflow_from_home_page(self.workflow_name)
-
-        # Go to actions
-        self.go_to_actions()
 
         # Open the right action
         self.open_action_edit('Send email with suggestions')
@@ -74,6 +71,7 @@ class Scenario3Captures(ScreenTests):
         self.body_ss('scenario_03_text.png')
 
         # Open the modal with the filter
+        self.select_filter_tab()
         self.open_filter()
 
         # Take picture of the filter
@@ -83,6 +81,7 @@ class Scenario3Captures(ScreenTests):
         self.cancel_modal()
 
         # Edit condition 1
+        self.select_condition_tab()
         self.open_condition('Bottom third')
 
         # Take picture of the modal

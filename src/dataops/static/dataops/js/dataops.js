@@ -28,9 +28,9 @@ var show_merge_figure = function() {
 }
 
 $(function () {
-  $('#checkAll').click(function () {    
-       $('input:checkbox').prop('checked', this.checked);    
-   });
+  $("#checkAll").click(function () {
+       $("input[id*='id_upload_']").prop("checked", this.checked);
+  });
 
   // Delete column
   $("#rowview-table").on("click", ".js-rowview-delete", loadForm)
@@ -40,17 +40,19 @@ $(function () {
 
   $("#transform-selection").on("click", ".js-transform-diagnose", loadForm);
 
-  // View add
-  $("#sqlconn-table").on("click", ".js-sqlconn-add", loadForm);
+  // SQL connection add, edit, delete and clone
+  $("#sql-connections").on("click", ".js-sqlconn-view", loadForm);
+
+  $("#sql-connections").on("click", ".js-sqlconn-add", loadForm);
   $("#modal-item").on("submit", ".js-sqlconn-add-form", saveForm);
 
-  $("#sqlconn-table").on("click", ".js-sqlconn-edit", loadForm);
+  $("#sqlconn-admin-table").on("click", ".js-sqlconn-edit", loadForm);
   $("#modal-item").on("submit", ".js-sqlconn-edit-form", saveForm);
 
-  $("#sqlconn-table").on("click", ".js-sqlconn-delete", loadForm);
+  $("#sqlconn-admin-table, #modal-item").on("click", ".js-sqlconn-delete", loadForm);
   $("#modal-item").on("submit", ".js-sqlconn-delete-form", saveForm);
 
-  $("#sqlconn-table").on("click", ".js-sqlconn-clone", loadForm);
+  $("#sqlconn-admin-table, #modal-item").on("click", ".js-sqlconn-clone", loadForm);
   $("#modal-item").on("submit", ".js-sqlconn-clone-form", saveForm);
 });
 
@@ -61,5 +63,19 @@ window.onload = function(){
   if (document.getElementById("id_columns") != null) {
     set_element_select("#id_columns");
   }
+  setDateTimePickers();
 };
+$(document).ready(function() {
+  if (location.hash) {
+    $("a[href='" + location.hash + "']").tab("show");
+  }
+  $(document.body).on("click", "a[data-toggle]", function(event) {
+    location.hash = this.getAttribute("href");
+  });
+});
+$(window).on("popstate", function() {
+  var anchor = location.hash || $("a[data-toggle='tab']").first().attr("href");
+  $("a[href='" + anchor + "']").tab("show");
+});
+
 

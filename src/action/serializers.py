@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-#
-from __future__ import unicode_literals, print_function
 
+
+from builtins import object
 from django.utils.translation import ugettext_lazy as _
 from rest_framework import serializers
 
@@ -13,7 +14,7 @@ from .models import Condition, Action
 
 class ColumnNameSerializer(serializers.ModelSerializer):
 
-    class Meta:
+    class Meta(object):
         model = Column
         fields = ('name',)
 
@@ -75,7 +76,7 @@ class ConditionSerializer(serializers.ModelSerializer):
 
         return condition_obj
 
-    class Meta:
+    class Meta(object):
         model = Condition
         exclude = ('id', 'action', 'created', 'modified')
 
@@ -150,7 +151,7 @@ class ActionSerializer(serializers.ModelSerializer):
         return action_obj
 
     # To get both Actions and Conditions
-    class Meta:
+    class Meta(object):
         model = Action
 
         exclude = ('id',
@@ -180,12 +181,12 @@ class ActionSelfcontainedSerializer(serializers.ModelSerializer):
                                         name=cname).first()
             if not col:
                 # new column
-                if citem['is_key']:
-                    raise Exception(
-                        _('New action cannot have non-existing key '
-                          'column {0}').format(cname))
+                # if citem['is_key']:
+                #     raise Exception(
+                #         _('New action cannot have non-existing key '
+                #           'column {0}').format(cname))
 
-                # Accummulate the new columns just in case we have to undo
+                # Accumulate the new columns just in case we have to undo
                 # the changes
                 new_columns.append(citem)
                 continue
@@ -300,7 +301,6 @@ class ActionSelfcontainedSerializer(serializers.ModelSerializer):
                 for citem in columns.data:
                     column = action_obj.workflow.columns.get(name=citem['name'])
                     action_obj.columns.add(column)
-                columns.save()
             else:
                 raise Exception(_('Unable to create columns field'))
         except Exception:
@@ -313,7 +313,7 @@ class ActionSelfcontainedSerializer(serializers.ModelSerializer):
 
         return action_obj
 
-    class Meta:
+    class Meta(object):
         model = Action
 
         exclude = ('id',

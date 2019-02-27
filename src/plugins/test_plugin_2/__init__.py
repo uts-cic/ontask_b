@@ -5,10 +5,10 @@ import pandas as pd
 
 # The field class_name contains the name of the class to load to execute the
 # plugin.
-class_name = 'OntaskTestPlugin'
+class_name = 'OnTaskTestPlugin'
 
 
-class OntaskTestPlugin(object):
+class OnTaskTestPlugin(object):
     """
     Example of a class that implements the OnTask plugin interface. The
     objects of this class have to provide the following elements:
@@ -19,7 +19,7 @@ class OntaskTestPlugin(object):
     plugin does
 
     3. input_column_names: A potentially empty list of column names (strings).
-    If the list is empty, the columns are selected by the userat execution
+    If the list is empty, the columns are selected by the user at execution
     time.
 
     4. output_column_names: Non empty list of names (strings) of the columns
@@ -55,7 +55,7 @@ class OntaskTestPlugin(object):
     """
 
     def __init__(self):
-        self.name = 'Test Plungin 2 Name'
+        self.name = 'Test Plugin 2 Name'
         self.description_txt = 'Test Plugin 2 Description Text'
         self.input_column_names = ['A1', 'A2']
         self.output_column_names = ['RESULT 3', 'RESULT 4']

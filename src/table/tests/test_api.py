@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
+
 
 import os
 
@@ -15,7 +15,7 @@ from workflow.models import Workflow, Column
 from workflow.ops import workflow_delete_column
 
 
-class TableApiBase(test.OntaskApiTestCase):
+class TableApiBase(test.OnTaskApiTestCase):
     fixtures = ['simple_table']
     filename = os.path.join(
         settings.BASE_DIR(),
@@ -39,6 +39,27 @@ class TableApiBase(test.OntaskApiTestCase):
                  "2017-10-12T00:32:44+11:00",
                  "2017-10-12T00:32:44+11:00"
                  ]
+    }
+
+    incorrect_table_1 = {
+        "email": {
+          "0": "student1@bogus.com",
+          "1": "student2@bogus.com",
+          "2": "student3@bogus.com",
+          "3": "student1@bogus.com"
+        },
+        "Another column": {
+          "0": 6.93333333333333,
+          "1": 9.1,
+          "2": 9.1,
+          "3": 5.03333333333333
+        },
+        "Quiz": {
+          "0": 1,
+          "1": 0,
+          "2": 3,
+          "3": 0
+        }
     }
 
     src_df = {
@@ -164,6 +185,28 @@ class TableApiCreate(TableApiBase):
         # information is correct
         workflow = Workflow.objects.get(pk=workflow.id)
         self.assertTrue(pandas_db.check_wf_df(workflow))
+
+    def test_table_json_create_error(self):
+        # Create a second workflow
+        response = self.client.post(reverse('workflow:api_workflows'),
+                                    {'name': test.wflow_name + '2',
+                                     'attributes': {'one': 'two'}},
+                                    format='json')
+
+        # Get the only workflow in the fixture
+        workflow = Workflow.objects.get(pk=response.data['id'])
+
+        # Upload the table
+        response = self.client.post(
+            reverse('table:api_ops',
+                    kwargs={'pk': workflow.id}),
+            {'data_frame': self.incorrect_table_1},
+            format='json')
+
+        self.assertTrue(
+            'The data has no column with unique values per row' in
+            response.data
+        )
 
     def test_table_pandas_create(self):
         # Create a second workflow

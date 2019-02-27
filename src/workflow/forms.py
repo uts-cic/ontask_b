@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
+
 
 import json
+from builtins import next
+from builtins import object
+from builtins import str
 
 import pandas as pd
-from datetimewidget.widgets import DateTimeWidget
+from bootstrap_datepicker_plus import DateTimePickerInput
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import ugettext_lazy as _
 
-from dataops import pandas_db, ops
+from dataops import pandas_db
 from ontask import ontask_prefs, is_legal_name
-from ontask.forms import RestrictedFileField, dateTimeOptions
+from ontask.forms import RestrictedFileField, dateTimeWidgetOptions
 from .models import Workflow, Column
-
-
-# Options for the datetime picker used in column forms
 
 
 class WorkflowForm(forms.ModelForm):
@@ -24,7 +24,7 @@ class WorkflowForm(forms.ModelForm):
         self.user = kwargs.pop('workflow_user', None)
         super(WorkflowForm, self).__init__(*args, **kwargs)
 
-    class Meta:
+    class Meta(object):
         model = Workflow
         fields = ('name', 'description_text',)
 
@@ -70,7 +70,6 @@ class AttributeItemForm(forms.Form):
 
 
 class ColumnBasicForm(forms.ModelForm):
-
     # Raw text for the categories
     raw_categories = forms.CharField(
         strip=True,
@@ -175,26 +174,21 @@ class ColumnBasicForm(forms.ModelForm):
 
         return data
 
-    class Meta:
+    class Meta(object):
         model = Column
         fields = ['name', 'description_text', 'data_type',
                   'position', 'raw_categories',
                   'active_from', 'active_to']
 
         widgets = {
-            'active_from': DateTimeWidget(options=dateTimeOptions,
-                                          usel10n=True,
-                                          bootstrap_version=3),
-            'active_to': DateTimeWidget(options=dateTimeOptions,
-                                        usel10n=True,
-                                        bootstrap_version=3)
+            'active_from': DateTimePickerInput(options=dateTimeWidgetOptions),
+            'active_to': DateTimePickerInput(options=dateTimeWidgetOptions),
         }
 
 
 class QuestionAddForm(ColumnBasicForm):
 
     def __init__(self, *args, **kwargs):
-
         super(QuestionAddForm, self).__init__(*args, **kwargs)
 
         self.fields['name'].label = _('Question name')
@@ -206,11 +200,10 @@ class QuestionAddForm(ColumnBasicForm):
         self.fields['active_to'].label = _('Question active until')
 
     def clean(self):
-
         data = super(QuestionAddForm, self).clean()
 
         # Check and force a correct column index
-        ncols = Column.objects.filter(workflow__id=self.workflow.id).count()
+        ncols = self.workflow.columns.count()
         if data['position'] < 1 or data['position'] > ncols:
             data['position'] = ncols + 1
 
@@ -279,7 +272,6 @@ class ColumnAddForm(ColumnBasicForm):
 class QuestionRenameForm(ColumnBasicForm):
 
     def __init__(self, *args, **kwargs):
-
         super(QuestionRenameForm, self).__init__(*args, **kwargs)
 
         self.fields['name'].label = _('Question name')
@@ -290,12 +282,13 @@ class QuestionRenameForm(ColumnBasicForm):
         self.fields['active_from'].label = _('Question active from')
         self.fields['active_to'].label = _('Question active until')
 
-    def clean(self):
+        self.fields['data_type'].disabled = True
 
+    def clean(self):
         data = super(QuestionRenameForm, self).clean()
 
         # Check and force a correct column index
-        ncols = Column.objects.filter(workflow__id=self.workflow.id).count()
+        ncols = self.workflow.columns.count()
         if data['position'] < 1 or data['position'] > ncols:
             data['position'] = ncols
 
@@ -333,8 +326,8 @@ class ColumnRenameForm(ColumnBasicForm):
 
             # Case 2: False -> True Unique values must be verified
             if not self.instance.is_key and \
-                    not ops.is_unique_column(self.data_frame[
-                                                 self.instance.name]):
+                    not pandas_db.is_unique_column(self.data_frame[
+                                                       self.instance.name]):
                 self.add_error(
                     'is_key',
                     _('The column does not have unique values for each row.')
@@ -355,7 +348,7 @@ class ColumnRenameForm(ColumnBasicForm):
 
 class FormulaColumnAddForm(forms.ModelForm):
     # Columns to combine
-    columns = forms.MultipleChoiceField([],
+    columns = forms.MultipleChoiceField(choices=[],
                                         required=False,
                                         label=_('Columns to combine*'))
 
@@ -455,7 +448,7 @@ class WorkflowImportForm(forms.Form):
         label='Name')
 
     file = RestrictedFileField(
-        max_upload_size=str(ontask_prefs.MAX_UPLOAD_SIZE),
+        max_upload_size=int(ontask_prefs.MAX_UPLOAD_SIZE),
         content_types=json.loads(str(ontask_prefs.CONTENT_TYPES)),
         allow_empty_file=False,
         label=_("File"),

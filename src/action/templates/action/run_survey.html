@@ -15,39 +15,46 @@
   <script src="{% static 'table/js/table.js' %}?v={% ontask_version %}"></script>
   <script type="text/javascript">
     if (document.getElementById("actioninrun-data") != null) {
-        // Required for DataTables
-        $(document).ready(function() {
-            $('#actioninrun-data').DataTable({
-                stateSave: true,
-                processing: true,
-                serverSide: true,
-                ajax: {
-                  url: "{% url 'action:run_survey_ss' action.id %}",
-                  type: 'POST',
-                },
-                "order": [0],
-                "columnDefs": [
-                    {"className": "dt-center", "targets": "_all"}
-                ],
-                language: {
-                  url: getLanguage()
-                }
-            });
+      // Required for DataTables
+      $(document).ready(function() {
+        $('#actioninrun-data').DataTable({
+          "search": {
+            "caseInsensitive": true,
+          },
+          stateSave: true,
+          stateSaveParams: function (settings, data) {
+            delete data.search;
+          },
+          processing: true,
+          serverSide: true,
+          ajax: {
+            url: "{% url 'action:run_survey_ss' action.id %}",
+            type: 'POST',
+          },
+          "order": [0],
+          language: {
+            "url": location.protocol + getLanguage()
+          },
+          columnDefs: [
+            {"className": "dt-center", "targets": "_all"},
+          ],
+          colReorder: false,
+          rowReorder: false,
+          scrollX: true,
         });
+      });
     }
   </script>
 {% endblock %}
 {% block container %}
-  <div id="table-content" align="center" class="container"
-       style="padding-top:2ex;">
-    <h4 class="page-header">
-      <strong>{{ action.name }}</strong>
+  <div class="container-fluid" id="action-survey-run">
+    <h1 class="text-center">{{ action.name }}
       <a href="{% url 'action:edit' action.id %}"
-         class="btn btn-primary btn-sm align-middle">
-      <span class="glyphicon glyphicon-folder-open"></span> {% trans 'Edit' %}</a>
-    </h4>
-    <p class="help-block">{{ action.description_text }}</p>
-    <table class="table display dataTable no-footer cell-border table-bordered"
+         class="btn btn-outline-dark btn-sm align-middle">
+      <span class="fa fa-pencil"></span> {% trans 'Edit' %}</a>
+    </h1>
+    <p class="help-block text-center">{{ action.description_text }}</p>
+    <table class="table table-hover table-bordered" style="width:100%;"
            id="actioninrun-data">
       <thead>
         <tr>
@@ -57,13 +64,9 @@
         </tr>
       </thead>
     </table>
-    <a class="btn btn-default spin" style="margin-right:2ex;"
-       href="{% url 'action:index' %}"> {% trans 'Back' %}</a>
-    <div class="modal fade" id="modal-item" data-backdrop="static" data-keyboard="false">
-      <div class="modal-dialog">
-        <div class="modal-content">
-        </div>
-      </div>
+    <div class="text-center">
+      <a class="btn btn-outline-dark spin" href="{% url 'action:index' %}"> {% trans 'Back' %}</a>
     </div>
   </div>
+  {% include 'modal.html' %}
 {% endblock container %}

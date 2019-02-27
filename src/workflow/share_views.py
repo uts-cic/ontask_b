@@ -1,47 +1,16 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
-
-from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
-from django.utils.translation import ugettext_lazy as _
 
 from logs.models import Log
 from ontask.permissions import is_instructor
-from workflow.views import WorkflowShareTable
 from .forms import SharedForm
 from .ops import get_workflow
-
-
-@user_passes_test(is_instructor)
-def share(request, pk):
-
-    # Get the workflow
-    workflow = get_workflow(request, pk)
-    if not workflow:
-        return redirect('workflow:index')
-
-    if workflow.user != request.user:
-        # Not allowed
-        messages.error(
-            request,
-            _('You can only share workflows that you created.')
-        )
-        return redirect('workflow:detail', workflow.id)
-
-    # Show the table
-    table = WorkflowShareTable(
-        workflow.shared.values('email', 'id').order_by('email')
-    )
-    context = {'table': table,
-               'not_shared': len(table.rows) == 0,
-               'workflow': workflow}
-    return render(request, 'workflow/share.html', context)
 
 
 @user_passes_test(is_instructor)
@@ -49,7 +18,7 @@ def share_create(request):
     # Get the workflow
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     data = dict()
     data['form_is_valid'] = False
@@ -91,13 +60,13 @@ def share_delete(request, pk):
     # Get the workflow
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     # If the user does not exist, go back to home page
     try:
         user = get_user_model().objects.get(id=pk)
     except ObjectDoesNotExist:
-        return redirect('workflow:index')
+        return redirect('home')
 
     data = dict()
     data['form_is_valid'] = False

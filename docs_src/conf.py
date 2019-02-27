@@ -18,6 +18,7 @@
 #
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath('../src'))
 import ontask
 
@@ -31,10 +32,10 @@ import ontask
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = ['sphinx.ext.autodoc',
-    'sphinx.ext.todo',
-    'sphinx.ext.mathjax',
-    'sphinx.ext.ifconfig',
-    'sphinx.ext.githubpages']
+              'sphinx.ext.todo',
+              'sphinx.ext.mathjax',
+              'sphinx.ext.ifconfig',
+              'sphinx.ext.githubpages']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -72,14 +73,20 @@ language = None
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = [
+    '_build',
+    'Thumbs.db',
+    '.DS_Store',
+    'Scenarios/scenario_04*',
+    '**/include_*.rst',
+    # 'Tutorial/Tasks*'
+]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
-
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -94,7 +101,15 @@ html_theme = 'alabaster'
 #
 # html_theme_options = {}
 html_theme_options = {
-    'show_related': True
+    'show_related': True,
+    'show_powered_by': False,
+    'show_relbars': True,
+    'fixed_sidebar': False,
+    'github_banner': True,
+    'github_button': True,
+    'github_user': 'abelardopardo',
+    'github_repo': 'ontask_b',
+    'logo': 'ontask-logo-1.png'
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,
@@ -117,12 +132,10 @@ html_sidebars = {
     ]
 }
 
-
 # -- Options for HTMLHelp output ------------------------------------------
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'OnTaskdoc'
-
 
 # -- Options for LaTeX output ---------------------------------------------
 
@@ -152,7 +165,6 @@ latex_documents = [
      u'Abelardo Pardo', 'manual'),
 ]
 
-
 # -- Options for manual page output ---------------------------------------
 
 # One entry per manual page. List of tuples
@@ -161,7 +173,6 @@ man_pages = [
     (master_doc, 'ontask', u'OnTask Documentation',
      [author], 1)
 ]
-
 
 # -- Options for Texinfo output -------------------------------------------
 
@@ -177,8 +188,114 @@ texinfo_documents = [
 # -- Additional Options --------------------------------------------------
 
 rst_prolog = '.. |ontask_version| replace:: %s\n' % ontask.__version__
+rst_prolog += """
+.. |fa-book| raw:: html
+
+   <span class="fa fa-book"></span>
+   
+.. |fa-pencil| raw:: html
+
+   <span class="fa fa-pencil"></span>
+   
+.. |fa-clone| raw:: html
+
+   <span class="fa fa-clone"></span>
+   
+.. |fa-minus-square| raw:: html
+
+   <span class="fa fa-minus-square"></span>
+   
+.. |fa-trash| raw:: html
+
+   <span class="fa fa-trash"></span>
+   
+.. |fa-plus| raw:: html
+
+   <span class="fa fa-plus"></span>
+   
+.. |fa-eye| raw:: html
+
+   <span class="fa fa-eye"></span>
+   
+.. |fa-dashboard| raw:: html
+
+   <span class="fa fa-dashboard"></span>
+
+.. |fa-download| raw:: html
+
+   <span class="fa fa-download"></span>
+
+.. |fa-upload| raw:: html
+
+   <span class="fa fa-upload"></span>
+
+.. |fa-bar-chart| raw:: html
+
+   <span class="fa fa-bar-chart"></span>
+
+.. |fa-calendar| raw:: html
+
+   <span class="fa fa-calendar"></span>
+
+.. |fa-home| raw:: html
+
+   <span class="fa fa-home"></span>
+
+.. |fa-table| raw:: html
+
+   <span class="fa fa-table"></span>
+
+.. |fa-comments| raw:: html
+
+   <span class="fa fa-comments"></span>
+
+.. |fa-rocket| raw:: html
+
+   <span class="fa fa-rocket"></span>
+
+.. |fa-link| raw:: html
+
+   <span class="fa fa-link"></span>
+
+.. |fa-file-archive-o| raw:: html
+
+   <span class="fa fa-file-archive-o"></span>
+
+.. |fa-floppy-o| raw:: html
+
+   <span class="fa fa-floppy-o"></span>
+
+.. |fa-check| raw:: html
+
+   <span class="fa fa-check"></span>
+
+.. |fa-cog| raw:: html
+
+   <span class="fa fa-cog"></span>
+
+.. |fa-compress| raw:: html
+
+   <span class="fa fa-compress"></span>
+
+.. |fa-step-forward| raw:: html
+
+   <span class="fa fa-step-forward"></span>
+
+.. |fa-step-backward| raw:: html
+
+   <span class="fa fa-step-backward"></span>
+
+.. |fa-user| raw:: html
+
+   <span class="fa fa-user"></span>
+
+.. |fa-database| raw:: html
+
+   <span class="fa fa-database"></span>
+"""
 
 def setup(app):
     app.add_stylesheet('css/custom.css')  # may also be an URL
-
-
+    app.add_stylesheet(
+        "https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css"
+    )

@@ -1,16 +1,33 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
 
-from datetimewidget.widgets import DateTimeWidget
+
+from builtins import next
+
+import pytz
+from bootstrap_datepicker_plus import DateTimePickerInput
 from django import forms
+from django.conf import settings
 from django.template.defaultfilters import filesizeformat
 from django.utils.translation import ugettext_lazy as _
 
 import ontask.ontask_prefs
 
-dateTimeOptions = {
-    'weekStart': 1,  # Start week on Monday
-    'minuteStep': 5,  # Minute step
+dateTimeWidgetOptions = {
+    'locale': settings.LANGUAGE_CODE,
+    'icons': {'time': 'fa fa-clock-o',
+              'date': 'fa fa-calendar',
+              'up': 'fa fa-chevron-up',
+              'down': 'fa fa-chevron-down',
+              'previous': 'fa fa-chevron-left',
+              'next': 'fa fa-chevron-right',
+              'today': 'fa fa-crosshairs',
+              'clear': 'fa fa-trash',
+              'close': 'fa fa-times-circle'},
+    'showTodayButton': True,
+    'showClear': True,
+    'showClose': True,
+    'calendarWeeks': True,
+    'timeZone': str(pytz.timezone(settings.TIME_ZONE)),
 }
 
 
@@ -20,7 +37,7 @@ class RestrictedFileField(forms.FileField):
         self.content_types = kwargs.pop('content_types', None)
         self.max_upload_size = kwargs.pop('max_upload_size', None)
         if not self.max_upload_size:
-            self.max_upload_size = str(ontask.ontask_prefs.MAX_UPLOAD_SIZE)
+            self.max_upload_size = int(ontask.ontask_prefs.MAX_UPLOAD_SIZE)
         super(RestrictedFileField, self).__init__(*args, **kwargs)
 
     def clean(self, *args, **kwargs):
@@ -30,7 +47,7 @@ class RestrictedFileField(forms.FileField):
                 if data.size > self.max_upload_size:
                     raise forms.ValidationError(
                         _('File size must be under %(max)s. Current file '
-                           'size is %(current)s.')
+                          'size is %(current)s.')
                         % ({
                             'max': filesizeformat(self.max_upload_size),
                             'current': filesizeformat(data.size)
@@ -69,7 +86,7 @@ def column_to_field(col, initial=None, required=False, label=None):
         if col.data_type == 'string':
             choices.insert(0, ('', '---'))
 
-        return forms.ChoiceField(choices,
+        return forms.ChoiceField(choices=choices,
                                  required=required,
                                  initial=initial,
                                  label=label)
@@ -104,9 +121,7 @@ def column_to_field(col, initial=None, required=False, label=None):
             initial=initial,
             label=label,
             required=required,
-            widget=DateTimeWidget(options=dateTimeOptions,
-                                  usel10n=True,
-                                  bootstrap_version=3),
+            widget=DateTimePickerInput(options=dateTimeWidgetOptions),
         )
     else:
-        raise Exception(_('Unable to process datatype '), col.data_type)
+        raise Exception(_('Unable to process data type '), col.data_type)

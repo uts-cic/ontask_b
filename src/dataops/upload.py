@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals, print_function
 
+
+from builtins import zip
+from builtins import range
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.shortcuts import redirect, render
@@ -45,7 +47,7 @@ def upload_s2(request):
     """
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     # Get the dictionary to store information about the upload
     # is stored in the session.
@@ -158,7 +160,7 @@ def upload_s2(request):
             {'message': _('Exception while retrieving the data frame')})
 
     # Update the data frame
-    status = ops.perform_dataframe_upload_merge(workflow.id,
+    status = ops.perform_dataframe_upload_merge(workflow,
                                                 existing_df,
                                                 data_frame,
                                                 upload_data)
@@ -188,7 +190,7 @@ def upload_s2(request):
                           'column_unique': col_info[2]})
 
     # Go back to show the workflow detail
-    return redirect(reverse('workflow:detail', kwargs={'pk': workflow.id}))
+    return redirect(reverse('table:display'))
 
 
 @user_passes_test(is_instructor)
@@ -240,7 +242,7 @@ def upload_s3(request):
     # Get the workflow id we are processing
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     # Get the dictionary to store information about the upload
     # is stored in the session.
@@ -356,7 +358,7 @@ def upload_s4(request):
     # Get the workflow id we are processing
     workflow = get_workflow(request)
     if not workflow:
-        return redirect('workflow:index')
+        return redirect('home')
 
     # Get the dictionary containing the information about the upload
     upload_data = request.session.get('upload_data', None)
@@ -378,7 +380,7 @@ def upload_s4(request):
                           {'message': _('Exception while loading data frame')})
 
         # Performing the merge
-        status = ops.perform_dataframe_upload_merge(workflow.id,
+        status = ops.perform_dataframe_upload_merge(workflow,
                                                     dst_df,
                                                     src_df,
                                                     upload_data)
@@ -402,7 +404,7 @@ def upload_s4(request):
 
             messages.error(request,
                            _('Merge operation failed.') + ' (' + status + ')'),
-            return redirect(reverse('dataops:uploadmerge'))
+            return redirect(reverse('table:display'))
 
         # Log the event
         Log.objects.register(request.user,
@@ -419,8 +421,7 @@ def upload_s4(request):
         # Remove the csvupload from the session object
         request.session.pop('upload_data', None)
 
-        return redirect(reverse('workflow:detail',
-                                kwargs={'pk': workflow.id}))
+        return redirect(reverse('table:display'))
 
     # We are processing a GET request
 
@@ -477,7 +478,7 @@ def upload_s4(request):
             continue
 
         # Case 2: Column is in DST and left untouched (no counter part in SRC)
-        if colname not in src_info.keys():
+        if colname not in list(src_info.keys()):
             info.append((colname, False, ''))
             continue
 

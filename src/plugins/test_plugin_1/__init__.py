@@ -5,10 +5,10 @@ import pandas as pd
 
 # The field class_name contains the name of the class to load to execute the
 # plugin.
-class_name = 'OntaskTestPlugin'
+class_name = 'OnTaskTestPlugin'
 
 
-class OntaskTestPlugin(object):
+class OnTaskTestPlugin:
     """
     Example of a class that implements the OnTask plugin interface. The
     objects of this class have to provide the following elements:
@@ -19,7 +19,7 @@ class OntaskTestPlugin(object):
     plugin does
 
     3. input_column_names: A potentially empty list of column names (strings).
-    If the list is empty, the columns are selected by the userat execution
+    If the list is empty, the columns are selected by the user at execution
     time.
 
     4. output_column_names: Non empty list of names (strings) of the columns
@@ -34,11 +34,11 @@ class OntaskTestPlugin(object):
       plugin through a form. The conditions on these values are:
 
       - name must be a string
-      - type must be a string equal to "integer", "double", "string", 
-        "datetime" or "boolean". 
+      - type must be a string equal to "integer", "double", "string",
+        "datetime" or "boolean".
       - The list of values is to restrict the
         possible values
-      - The initial value must be of the type specified by the second 
+      - The initial value must be of the type specified by the second
         element.
       - Help_text a string to show as help text
 
@@ -55,22 +55,29 @@ class OntaskTestPlugin(object):
     """
 
     def __init__(self):
-        self.name = 'Test Plungin 1 Name'
+        self.name = 'Test Plugin 1 Name'
         self.description_txt = 'Test Plugin 1 Description Text'
         self.input_column_names = list()
         self.output_column_names = ['RESULT 1', 'RESULT 2']
         self.parameters = [
             ('param string', 'string', ['v1', 'v2'], 'v1', 'help param string'),
             ('param integer', 'integer', [], None, 'help param integer'),
-            ('param double', 'double', [1.2, 2.2, 3.2], None,
-                             'help param double'),
+            ('param double',
+             'double',
+             [1.2, 2.2, 3.2],
+             None,
+             'help param double'),
             ('param boolean', 'boolean', [], True, 'help param boolean'),
-            ('param datetime', 'datetime', [], '2018-05-25 18:03:00+09:30',
-                               'help param datetime'),
-            ('param datetime2', 'datetime', 
-                                [],
-                                '2018-05-25 18:03:00+09:30',
-                                'help param datetime'),
+            ('param datetime',
+             'datetime',
+             [],
+             '2018-05-25 18:03:00+09:30',
+             'help param datetime'),
+            ('param datetime2',
+             'datetime',
+             [],
+             '2018-05-25 18:03:00+09:30',
+             'help param datetime'),
         ]
 
     def run(self, data_frame, merge_key, parameters=dict):

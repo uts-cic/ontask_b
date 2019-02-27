@@ -1,10 +1,118 @@
+## 4.1 (2019-02-27)
+
+### Added
+
+- Possibility of disabling the type of actions available in config file (Issue #112)
+  
+### Fixed
+
+- Conditions break when renaming them (Issue #128)
+
+- Fixed incorrect highlighting of Workflows link (Issue #127)
+
+- Fixed localization in dataTables using only the URL field
+
+### Changed
+
+- Footer is now sticky to the bottom of the viewport if body is shorter (Issue #121)
+
+- Redesigned the top bar menu to include icons and text (Issue #127)
+
+- Moved contacts and about links only to the Login page (Issue #127)
+
+- Moved the SQL icon in the admin profile to the right of the menu (Issue #127)
+
+## 4.0.1 (2019-02-19)
+
+### Fixed
+
+- Incorrect download of table data into CSV format
+
+- API table upload did not check for presence of key column
+
+### Changed
+
+- Update the chinese i18n
+
+## 4.0 (2019-02-14)
+
+### Fixed
+
+- Various bugs due to the incompatibility with Python3/Django2
+
+### Added
+
+- Support for Python3/Django2
+
+- New type of personalized email actions that send messages using the Canvas API
+
+### Changed
+
+- Datetimepicker widget changed due to incompatibilities with Django 2
+
+- Reviewed the Chinese localization
+
+- Major UI redesign to use more intuitive constructs and better use of screen space
+
+- Migration to Bootstrap 4
+
+## 3.2.1 (2018-11-21)
+
+### Added
+
+- Survey columns now can be queried about their null and not null status.
+
+### Changed
+
+- Significant changes in the documentation (more to come) to provide more activities and details in the tutorial
+
+- Various minor cosmetic changes in the HTML structure of the pages
+
+- Updated the version of QueryBuilder and added localization files
+
+### Fixed
+
+- Randomly populated columns now are guaranteed to have equal numer of elements in each partition (Issue #104)
+
+- Bug when using the Check all box in CSV upload. It was selecting all checkboxes in the page, now only those related to column upload
+
+- Bug allowing a workflow to loose its key column through outer merge operation. 
+
+- Bug preventing the conditions to be clone in the actions
+
+## 3.2.0 (2018-11-12)
+
+### Added
+
+- Personalized actions can now be downloaded in a ZIP with one file per message. Suitable to be used in combination with *Upload multiple feedback files in a ZIP* in [Moodle Assignments](https://docs.moodle.org/35/en/Assignment_settings#Feedback_types) (Issue #96)
+
+### Fixed
+
+- Error when merging data frames with key columns with different name (Issue #103)
+
+- Error preventing the renaming of actions (Issue #101)
+
+### Changed
+
+- Reviewed the Chinese localization## 3.1.0 (2018-10-31)
+
+### Added
+
+- Initial support for localization to Chinese
+
+## 3.1.0 (2018-10-31)
+
+### Added
+
+- Initial support for localization to Chinese
+
 ## 3.0.4 (2018-10-20)
 
 ### Changed
 
 - Cosmetic changes in menu bar to visualise properly in mobile devices.
 
-### Fiexd
+### Fixed
 
 - Fixed bug that showed the spinner when an invalid field is present in a form
 
